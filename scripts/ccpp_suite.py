@@ -19,6 +19,7 @@ from framework_env import CCPPFrameworkEnv
 from metavar import Var, VarDictionary, ccpp_standard_var
 from parse_tools import ParseContext, ParseSource
 from parse_tools import ParseInternalError, CCPPError
+from parse_tools import ParseMetadataErrors
 from parse_tools import read_xml_file, validate_xml_file, find_schema_version
 from parse_tools import init_log, set_log_to_null
 from suite_objects import CallList, Group, Scheme
@@ -167,7 +168,7 @@ character(len=16) :: {css_var_name} = '{state}'
         # end if
         group = Group(gxml, transition, self, self.__context, run_env)
         for svar in CCPP_REQUIRED_VARS:
-            group.add_call_list_variable(svar)
+            group.add_call_list_variable(svar, None)
         # end for
         if transition != RUN_PHASE_NAME:
             self.__full_groups[group.name] = group
@@ -319,7 +320,7 @@ character(len=16) :: {css_var_name} = '{state}'
         # end if
         return var
 
-    def analyze(self, host_model, scheme_library, ddt_library, run_env):
+    def analyze(self, host_model, scheme_library, ddt_library, run_env, parse_errors):
         """Collect all information needed to write a suite file
         >>> CCPP_STATE_MACH.transition_match('init')
         'initialize'
@@ -433,7 +434,7 @@ character(len=16) :: {css_var_name} = '{state}'
                                                   for x in item.schemes()]))
             item.analyze(phase, self, scheme_library, ddt_library,
                          self.check_suite_state(phase),
-                         self.set_suite_state(phase))
+                         self.set_suite_state(phase), parse_errors)
             # Look for group variables that need to be promoted to the suite
             # We need to promote any variable used later to the suite, however,
             # we do not yet know if it will be used.
@@ -626,13 +627,19 @@ class API(VarDictionary):
                 raise CCPPError(errmsg.format(header.title))
             # end if
         # end for
+        # Initialize parse error object
+        parse_errors = ParseMetadataErrors()
         # Turn the SDF files into Suites
         for sdf in sdfs:
             suite = Suite(sdf, self, run_env)
             suite.analyze(self.host_model, scheme_library,
-                          self.__ddt_lib, run_env)
+                          self.__ddt_lib, run_env, parse_errors)
             self.__suites.append(suite)
         # end for
+        if parse_errors.has_errors():
+            errmsg = parse_errors.errstr()
+            raise CCPPError(errmsg)
+        # end if
         # We will need the correct names for errmsg and errcode
         evar = self.host_model.find_variable(standard_name='ccpp_error_message')
         subst_dict = {'intent':'out'}

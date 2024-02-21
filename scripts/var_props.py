@@ -782,8 +782,10 @@ class VarCompatObj:
 
     # Test that we can create a standard VarCompatObj object
     >>> from parse_tools import init_log, set_log_to_null
+    >>> from parse_tools import ParseMetadataErrors
     >>> _DOCTEST_LOGGING = init_log('var_props')
     >>> set_log_to_null(_DOCTEST_LOGGING)
+    >>> parse_errors = ParseMetadataErrors()
     >>> _DOCTEST_RUNENV = CCPPFrameworkEnv(_DOCTEST_LOGGING, \
                                        ndict={'host_files':'', \
                                               'scheme_files':'', \
@@ -793,46 +795,46 @@ class VarCompatObj:
                                                    "kind_host=REAL64"])
     >>> VarCompatObj("var_stdname", "real", "kind_phys", "m", [], "var1_lname", False,\
                      "var_stdname", "real", "kind_phys", "m", [], "var2_lname", False,\
-                     _DOCTEST_RUNENV) #doctest: +ELLIPSIS
+                     _DOCTEST_RUNENV, parse_errors) #doctest: +ELLIPSIS
     <var_props.VarCompatObj object at 0x...>
 
     # Test that a 2-D var with no horizontal transform works
     >>> VarCompatObj("var_stdname", "real", "kind_phys", "m", ['horizontal_dimension'], "var1_lname", False, \
                      "var_stdname", "real", "kind_phys", "m", ['horizontal_dimension'], "var2_lname", False, \
-                     _DOCTEST_RUNENV) #doctest: +ELLIPSIS
+                     _DOCTEST_RUNENV, parse_errors) #doctest: +ELLIPSIS
     <var_props.VarCompatObj object at 0x...>
 
     # Test that a 2-D var with a horizontal transform works
     >>> VarCompatObj("var_stdname", "real", "kind_phys", "m", ['horizontal_dimension'],   "var1_lname", False, \
                      "var_stdname", "real", "kind_phys", "m", ['horizontal_loop_extent'], "var2_lname", False, \
-                     _DOCTEST_RUNENV) #doctest: +ELLIPSIS
+                     _DOCTEST_RUNENV, parse_errors) #doctest: +ELLIPSIS
     <var_props.VarCompatObj object at 0x...>
 
     # Test that a 2-D var with unit conversion m->km works
     >>> VarCompatObj("var_stdname", "real", "kind_phys", "m",  ['horizontal_dimension'], "var1_lname", False, \
                      "var_stdname", "real", "kind_phys", "km", ['horizontal_dimension'], "var2_lname", False, \
-                     _DOCTEST_RUNENV) #doctest: +ELLIPSIS
+                     _DOCTEST_RUNENV, parse_errors) #doctest: +ELLIPSIS
     <var_props.VarCompatObj object at 0x...>
 
     # Test that a 2-D var with unit conversion m->km works and that it
     # produces the correct forward transformation
     >>> VarCompatObj("var_stdname", "real", "kind_phys", "m",  ['horizontal_dimension'], "var1_lname", False, \
                      "var_stdname", "real", "kind_phys", "km", ['horizontal_dimension'], "var2_lname", False, \
-                     _DOCTEST_RUNENV).forward_transform("var1_lname", "var2_lname", 'i', 'i')
+                     _DOCTEST_RUNENV, parse_errors).forward_transform("var1_lname", "var2_lname", 'i', 'i')
     'var1_lname(i) = 1.0E-3_kind_phys*var2_lname(i)'
 
     # Test that a 3-D var with unit conversion m->km and vertical flipping
     # works and that it produces the correct reverse transformation
     >>> VarCompatObj("var_stdname", "real", "kind_phys", "m", ['horizontal_dimension', 'vertical_layer_dimension'], "var1_lname", False,\
                      "var_stdname", "real", "kind_phys", "km",['horizontal_dimension', 'vertical_layer_dimension'], "var2_lname", True, \
-                     _DOCTEST_RUNENV).reverse_transform("var1_lname", "var2_lname", ('i','k'), ('i','nk-k+1'))
+                     _DOCTEST_RUNENV, parse_errors).reverse_transform("var1_lname", "var2_lname", ('i','k'), ('i','nk-k+1'))
     'var1_lname(i,nk-k+1) = 1.0E+3_kind_phys*var2_lname(i,k)'
     """
 
     def __init__(self, var1_stdname, var1_type, var1_kind, var1_units,
                  var1_dims, var1_lname, var1_top, var2_stdname, var2_type, var2_kind,
-                 var2_units, var2_dims, var2_lname, var2_top, run_env, v1_context=None,
-                 v2_context=None):
+                 var2_units, var2_dims, var2_lname, var2_top, run_env, parse_errors,
+                 v1_context=None, v2_context=None):
         """Initialize this object with information on the equivalence and/or
            conformability of two variables.
         variable 1 is described by <var1_stdname>, <var1_type>, <var1_kind>,
@@ -916,7 +918,8 @@ class VarCompatObj:
                 self.__equiv = False
                 # Try to find a set of unit conversions
                 self.__unit_transforms = self._get_unit_convstrs(var1_units,
-                                                                 var2_units)
+                                                                 var2_units,
+                                                                 parse_errors)
             # end if
         # end if
         if self.__compat:
@@ -1034,6 +1037,7 @@ class VarCompatObj:
 
         # Initial setup
         >>> from parse_tools import init_log, set_log_to_null
+        >>> from parse_tools import ParseMetadataErrors
         >>> _DOCTEST_LOGGING = init_log('var_props')
         >>> set_log_to_null(_DOCTEST_LOGGING)
         >>> _DOCTEST_RUNENV = CCPPFrameworkEnv(_DOCTEST_LOGGING, \
@@ -1045,10 +1049,12 @@ class VarCompatObj:
                                                            "kind_host=REAL64"])
         >>> _DOCTEST_CONTEXT1 = ParseContext(linenum=3, filename='foo.F90')
         >>> _DOCTEST_CONTEXT2 = ParseContext(linenum=5, filename='bar.F90')
+        >>> parse_errors = ParseMetadataErrors()
         >>> _DOCTEST_VCOMPAT = VarCompatObj("var_stdname", "real", "kind_phys", \
                                             "m", [], "var1_lname", False, "var_stdname", \
                                             "real", "kind_phys", "m", [], \
                                             "var2_lname", False, _DOCTEST_RUNENV, \
+                                            parse_errors, \
                                             v1_context=_DOCTEST_CONTEXT1, \
                                             v2_context=_DOCTEST_CONTEXT2)
 
@@ -1081,13 +1087,14 @@ class VarCompatObj:
         # end if
         return None
 
-    def _get_unit_convstrs(self, var1_units, var2_units):
+    def _get_unit_convstrs(self, var1_units, var2_units, parse_errors):
         """Attempt to retrieve the forward and reverse unit transformations
         for transforming a variable in <var1_units> to / from a variable in
         <var2_units>.
 
         # Initial setup
         >>> from parse_tools import init_log, set_log_to_null
+        >>> from parse_tools import ParseMetadataErrors
         >>> _DOCTEST_LOGGING = init_log('var_props')
         >>> set_log_to_null(_DOCTEST_LOGGING)
         >>> _DOCTEST_RUNENV = CCPPFrameworkEnv(_DOCTEST_LOGGING, \
@@ -1099,52 +1106,63 @@ class VarCompatObj:
                                                            "kind_host=REAL64"])
         >>> _DOCTEST_CONTEXT1 = ParseContext(linenum=3, filename='foo.F90')
         >>> _DOCTEST_CONTEXT2 = ParseContext(linenum=5, filename='bar.F90')
+        >>> parse_errors = ParseMetadataErrors()
         >>> _DOCTEST_VCOMPAT = VarCompatObj("var_stdname", "real", "kind_phys", \
                                             "m", [], "var1_lname", False, "var_stdname", \
                                             "real", "kind_phys", "m", [], \
                                             "var2_lname", False, _DOCTEST_RUNENV, \
+                                            parse_errors, \
                                             v1_context=_DOCTEST_CONTEXT1, \
                                             v2_context=_DOCTEST_CONTEXT2)
 
         # Try some working unit transforms
-        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('m', 'mm')
+        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('m', 'mm', parse_errors)
         ('1.0E+3{kind}*{var}', '1.0E-3{kind}*{var}')
-        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('kg kg-1', 'g kg-1')
+        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('kg kg-1', 'g kg-1', parse_errors)
         ('1.0E+3{kind}*{var}', '1.0E-3{kind}*{var}')
-        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('C', 'K')
+        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('C', 'K', parse_errors)
         ('{var}+273.15{kind}', '{var}-273.15{kind}')
 
         # Try an invalid conversion
-        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('1', 'none') #doctest: +ELLIPSIS
-        Traceback (most recent call last):
-        ...
-        parse_source.ParseSyntaxError: Unsupported unit conversion, '1' to 'none' for 'var_stdname'
+        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('1', 'none', parse_errors) 
+        ('', '')
+        >>> print(parse_errors.errstr())
+        <BLANKLINE>
+        UNIT ERRORS:
+        Unsupported unit conversion, '1' to 'none' for 'var_stdname'
 
         # Try an unsupported conversion
-        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('C', 'm') #doctest: +ELLIPSIS
-        Traceback (most recent call last):
-        ...
-        parse_source.ParseSyntaxError: Unsupported unit conversion, 'C' to 'm' for 'var_stdname'
+        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('C', 'm', parse_errors)
+        ('', '')
+        >>> print(parse_errors.errstr())
+        <BLANKLINE>
+        UNIT ERRORS:
+        Unsupported unit conversion, '1' to 'none' for 'var_stdname'
+        Unsupported unit conversion, 'C' to 'm' for 'var_stdname'
         """
-        u1_str = self.units_to_string(var1_units, self.__v1_context)
-        u2_str = self.units_to_string(var2_units, self.__v2_context)
+        u1_str = self.units_to_string(var1_units, parse_errors, self.__v1_context)
+        u2_str = self.units_to_string(var2_units, parse_errors, self.__v2_context)
         unit_conv_str = "{0}__to__{1}".format(u1_str, u2_str)
         try:
             forward_transform = getattr(unit_conversion, unit_conv_str)()
         except AttributeError:
-            emsg = "Unsupported unit conversion, '{}' to '{}' for '{}'"
-            raise ParseSyntaxError(emsg.format(var1_units, var2_units,
-                                               self.__stdname,
-                                               context=self.__v2_context))
+            emsg = f"Unsupported unit conversion, '{var1_units}' to '{var2_units}' for '{self.__stdname}'"
+            parse_errors.append_error(emsg, 'units')
+            return ('', '')
+#            raise ParseSyntaxError(emsg.format(var1_units, var2_units,
+#                                               self.__stdname,
+#                                               context=self.__v2_context))
         # end if
         unit_conv_str = "{0}__to__{1}".format(u2_str, u1_str)
         try:
             reverse_transform = getattr(unit_conversion, unit_conv_str)()
         except AttributeError:
-            emsg = "Unsupported unit conversion, '{}' to '{}' for '{}'"
-            raise ParseSyntaxError(emsg.format(var2_units, var1_units,
-                                               self.__stdname,
-                                               context=self.__v1_context))
+            emsg = f"Unsupported unit conversion, '{var2_units}' to '{var1_units}' for '{self.__stdname}'"
+            parse_errors.append_error(emsg, 'units')
+            return ('', '')
+#            raise ParseSyntaxError(emsg.format(var2_units, var1_units,
+#                                               self.__stdname,
+#                                               context=self.__v1_context))
         # end if
         return (forward_transform, reverse_transform)
 
@@ -1160,6 +1178,7 @@ class VarCompatObj:
 
         # Initial setup
         >>> from parse_tools import init_log, set_log_to_null
+        >>> from parse_tools import ParseMetadataErrors
         >>> _DOCTEST_LOGGING = init_log('var_props')
         >>> set_log_to_null(_DOCTEST_LOGGING)
         >>> _DOCTEST_RUNENV = CCPPFrameworkEnv(_DOCTEST_LOGGING, \
@@ -1171,10 +1190,12 @@ class VarCompatObj:
                                                    "kind_host=REAL64"])
         >>> _DOCTEST_CONTEXT1 = ParseContext(linenum=3, filename='foo.F90')
         >>> _DOCTEST_CONTEXT2 = ParseContext(linenum=5, filename='bar.F90')
+        >>> parse_errors = ParseMetadataErrors()
         >>> _DOCTEST_VCOMPAT = VarCompatObj("var_stdname", "real", "kind_phys", \
                                     "m", [], "var1_lname", False, "var_stdname", \
                                     "real", "kind_phys", "m", [], \
                                     "var2_lname", False, _DOCTEST_RUNENV, \
+                                    parse_errors, \
                                     v1_context=_DOCTEST_CONTEXT1, \
                                     v2_context=_DOCTEST_CONTEXT2)
 
@@ -1287,7 +1308,7 @@ class VarCompatObj:
         # end if (no else, kind_ok already False)
         return kind_ok
 
-    def units_to_string(self, units, context=None):
+    def units_to_string(self, units, parse_errors, context=None):
         """Replace variable unit description with string that is a legal
         Python identifier.
         If the resulting string is a Python keyword, raise an exception."""
@@ -1303,15 +1324,17 @@ class VarCompatObj:
         # end if
         # Test that the resulting string is a valid Python identifier
         if not string.isidentifier():
-            emsg = "Unsupported units entry for {}, '{}'{}"
             ctx = context_string(context)
-            raise ParseSyntaxError(emsg.format(self.__stdname, units ,ctx))
+            emsg = f"Unsupported units entry for {self.__stdname}, '{units}'{ctx}"
+            parse_errors.append_error(emsg, 'units')
+#            raise ParseSyntaxError(emsg.format(self.__stdname, units ,ctx))
         # end if
         # Test that the resulting string is NOT a Python keyword
         if keyword.iskeyword(string):
-            emsg = "Invalid units entry, '{}', Python identifier"
-            raise ParseSyntaxError(emsg.format(units),
-                                   context=context)
+            emsg = "Invalid units entry, '{units}', Python identifier"
+            parse_errors.append_error(emsg, 'units')
+#            raise ParseSyntaxError(emsg.format(units),
+#                                   context=context)
         # end if
         return string
 

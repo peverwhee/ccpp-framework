@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from parse_source import ParseContext, ParseSource
 from parse_source import ParseSyntaxError, ParseInternalError
 from parse_source import CCPPError, context_string, type_name
+from parse_source import ParseMetadataErrors
 from parse_source import unique_standard_name, reset_standard_name_counter
 from parse_object import ParseObject
 from parse_checkers import check_fortran_id, FORTRAN_ID

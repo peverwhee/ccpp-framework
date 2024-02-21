@@ -118,6 +118,59 @@ def type_name(obj):
     return type(obj).__name__
 
 ###############################################################################
+class ParseMetadataErrors():
+    """Class to hold all errors to return to user during parsing"""
+    def __init__(self):
+        """Initialize object"""
+        self.__stdname_errors = []
+        self.__unit_errors = []
+        self.__misc_errors = []
+
+    def append_error(self, message, errtype=""):
+        """Append message to list of error messages"""
+        if (errtype == 'units'):
+            self.__unit_errors.append(message)
+        elif (errtype == 'standard names'):
+            self.__stdname_errors.append(message)
+        else:
+            self.__misc_errors(message)
+        # endif
+
+    def has_errors(self):
+        """Return true iff errors array is not empty"""
+        if len(self.__unit_errors) > 0 or len(self.__stdname_errors) > 0 or \
+           len(self.__misc_errors) > 0:
+            return True
+        else:
+            return False
+        #end if
+
+    def stdname_errors(self):
+        """Return string of all error messages related to standard names"""
+        errstr = f"\n".join(self.__stdname_errors)
+        return errstr
+
+    def unit_errors(self):
+        """Return string of all error messages related to units"""
+        errstr = f"\n".join(self.__unit_errors)
+        return errstr
+
+    def errstr(self):
+        """Return string of all error messages"""
+        errstr = ''
+        if len(self.__stdname_errors) > 0:
+            errstr += "\nSTANDARD NAME ERRORS:\n"
+            errstr += self.stdname_errors()
+        # end if
+        if len(self.__unit_errors) > 0:
+            errstr += "\nUNIT ERRORS:\n"
+            errstr += self.unit_errors()
+        # end if
+        return errstr
+
+###############################################################################
+
+###############################################################################
 class CCPPError(ValueError):
     """Class so programs can log user errors without backtrace"""
     def __init__(self, message):
