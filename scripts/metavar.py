@@ -370,7 +370,7 @@ class Var:
                                    context=self.context) from cperr
         # end try
 
-    def compatible(self, other, run_env):
+    def compatible(self, other, run_env, parse_errors):
         """Return a VarCompatObj object which describes the equivalence,
         compatibility, or incompatibility between <self> and <other>.
         """
@@ -392,7 +392,7 @@ class Var:
         odims = other.get_dimensions()
         compat = VarCompatObj(sstd_name, stype, skind, sunits, sdims, sloc_name, stopp,
                               ostd_name, otype, okind, ounits, odims, oloc_name, otopp,
-                              run_env,
+                              run_env, parse_errors,
                               v1_context=self.context, v2_context=other.context)
         if (not compat) and (run_env.logger is not None):
             incompat_str = compat.incompat_reason
@@ -1578,7 +1578,7 @@ class VarDictionary(OrderedDict):
         # end for
         return vlist
 
-    def add_variable(self, newvar, run_env, exists_ok=False, gen_unique=False,
+    def add_variable(self, newvar, run_env, parse_errors=None, exists_ok=False, gen_unique=False,
                      adjust_intent=False):
         """Add <newvar> if it does not conflict with existing entries
         If <exists_ok> is True, attempting to add an identical copy is okay.
@@ -1602,7 +1602,7 @@ class VarDictionary(OrderedDict):
                                    token=standard_name, context=newvar.context)
         # end if
         if cvar is not None:
-            compat = cvar.compatible(newvar, run_env)
+            compat = cvar.compatible(newvar, run_env, parse_errors)
             if compat:
                 # Check for intent mismatch
                 vintent = cvar.get_prop_value('intent')

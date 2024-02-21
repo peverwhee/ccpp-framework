@@ -91,7 +91,7 @@ class CallList(VarDictionary):
             # end if
         # end for
 
-    def add_variable(self, newvar, run_env, exists_ok=False, gen_unique=False,
+    def add_variable(self, newvar, run_env, parse_errors=None, exists_ok=False, gen_unique=False,
                      adjust_intent=False):
         """Add <newvar> as for VarDictionary but make sure that the variable
            has an intent with the default being intent(in).
@@ -104,7 +104,7 @@ class CallList(VarDictionary):
                                   source_type=_API_GROUP_VAR_NAME,
                                   context=oldvar.context)
         # end if
-        super().add_variable(newvar, run_env, exists_ok=exists_ok,
+        super().add_variable(newvar, run_env, parse_errors=parse_errors, exists_ok=exists_ok,
                              gen_unique=gen_unique, adjust_intent=adjust_intent)
 
     def call_string(self, cldicts=None, is_func_call=False, subname=None):
@@ -395,7 +395,7 @@ class SuiteObject(VarDictionary):
         # end while
         return lvar
 
-    def add_call_list_variable(self, newvar, exists_ok=False,
+    def add_call_list_variable(self, newvar, parse_errors=None, exists_ok=False,
                                gen_unique=False, subst_dict=None):
         """Add <newvar> to this SuiteObject's call_list. If this SuiteObject
            does not have a call list, recursively try the SuiteObject's parent
@@ -439,7 +439,7 @@ class SuiteObject(VarDictionary):
                 newvar = oldvar.clone(subst_dict, source_name=self.name,
                                       source_type=stype, context=self.context)
             # end if
-            self.call_list.add_variable(newvar, self.run_env,
+            self.call_list.add_variable(newvar, self.run_env, parse_errors,
                                         exists_ok=exists_ok,
                                         gen_unique=gen_unique,
                                         adjust_intent=True)
@@ -479,7 +479,7 @@ class SuiteObject(VarDictionary):
                                                subst_dict=subst_dict)
         # end if
 
-    def add_variable_to_call_tree(self, var, vmatch=None, subst_dict=None):
+    def add_variable_to_call_tree(self, var, parse_errors=None, vmatch=None, subst_dict=None):
         """Add <var> to <self>'s call_list (or a parent if <self> does not
               have an active call_list).
         If <vmatch> is not None, also add the loop substitution variables
@@ -489,7 +489,7 @@ class SuiteObject(VarDictionary):
         """
         found_dims = False
         if var is not None:
-            self.add_call_list_variable(var, exists_ok=True,
+            self.add_call_list_variable(var, parse_errors,  exists_ok=True,
                                         gen_unique=True, subst_dict=subst_dict)
             found_dims = True
         # end if
@@ -817,7 +817,7 @@ class SuiteObject(VarDictionary):
         # end if
         return found_var
 
-    def match_variable(self, var, run_env):
+    def match_variable(self, var, run_env, parse_errors):
         """Try to find a source for <var> in this SuiteObject's dictionary
         tree. Several items are returned:
         found_var: True if a match was found
@@ -873,7 +873,7 @@ class SuiteObject(VarDictionary):
                 match = True
             # Create compatability object, containing any necessary forward/reverse 
             # transforms from <var> and <dict_var>
-            compat_obj = var.compatible(dict_var, run_env)
+            compat_obj = var.compatible(dict_var, run_env, parse_errors)
 
             # end if
             # Add the variable to the parent call tree
@@ -882,7 +882,7 @@ class SuiteObject(VarDictionary):
             else:
                 sdict = {'dimensions':new_dict_dims}
             # end if
-            found_var = self.parent.add_variable_to_call_tree(var,
+            found_var = self.parent.add_variable_to_call_tree(var, parse_errors,
                                                               subst_dict=sdict)
             if not match:
                 found_var = False
@@ -1118,7 +1118,7 @@ class Scheme(SuiteObject):
         This is an override of the SuiteObject version"""
         return None
 
-    def analyze(self, phase, group, scheme_library, suite_vars, level):
+    def analyze(self, phase, group, scheme_library, suite_vars, level, parse_errors):
         """Analyze the scheme's interface to prepare for writing"""
         self.__group = group
         my_header = None
@@ -1150,7 +1150,7 @@ class Scheme(SuiteObject):
             def_val = var.get_prop_value('default_value')
             vdims = var.get_dimensions()
             vintent = var.get_prop_value('intent')
-            args = self.match_variable(var, self.run_env)
+            args = self.match_variable(var, self.run_env, parse_errors)
             found, dict_var, vert_dim, new_dims, missing_vert, compat_obj = args
             if found:
                 if self.__group.run_env.debug:
@@ -1195,27 +1195,25 @@ class Scheme(SuiteObject):
                     # We still need it in our call list (the group uses a clone)
                     self.add_call_list_variable(var)
                 else:
-                    errmsg = 'Input argument for {}, {}, not found.'
+                    errmsg = f'Input argument for {self.subroutine_name}, {vstdname}, not found.'
                     if self.find_variable(source_var=var) is not None:
                         # The variable exists, maybe it is dim mismatch
                         lname = var.get_prop_value('local_name')
-                        emsg = '\nCheck for dimension mismatch in {}'
-                        errmsg += emsg.format(lname)
+                        errmsg += f'\nCheck for dimension mismatch in {lname}'
                     # end if
                     if ((not self.run_phase()) and
                         (vstdname in CCPP_LOOP_VAR_STDNAMES)):
-                        emsg = '\nLoop variables not allowed in {} phase.'
-                        errmsg += emsg.format(self.phase())
+                        errmsg += f'\nLoop variables not allowed in {self.phase()} phase.'
                     # end if
-                    raise CCPPError(errmsg.format(self.subroutine_name,
-                                                  vstdname))
+                    parse_errors.append_error(errmsg, 'standard names')
                 # end if
             # end if
             # Are there any forward/reverse transforms for this variable?
             if compat_obj is not None and (compat_obj.has_vert_transforms or
                                            compat_obj.has_unit_transforms or
                                            compat_obj.has_kind_transforms):
-                self.add_var_transform(var, compat_obj, vert_dim)
+                if not parse_errors.has_errors():
+                   self.add_var_transform(var, compat_obj, vert_dim)
 
         # end for
         if self.needs_vertical is not None:
@@ -1223,7 +1221,7 @@ class Scheme(SuiteObject):
             if isinstance(self.parent, VerticalLoop):
                 # Restart the loop analysis
                 scheme_mods = self.parent.analyze(phase, group, scheme_library,
-                                                  suite_vars, level)
+                                                  suite_vars, level, parse_errors)
             # end if
         # end if
         return scheme_mods
@@ -1542,7 +1540,6 @@ class Scheme(SuiteObject):
         rindices[vdim] = '1:'+vname
         if compat_obj.has_vert_transforms:
             rindices[vdim] = vname+':1:-1'
-
         # If needed, modify horizontal dimension for loop substitution.
         # NOT YET IMPLEMENTED
         #hdim = find_horizontal_dimension(var.get_dimensions())
@@ -1707,7 +1704,7 @@ class VerticalLoop(SuiteObject):
             self.add_part(item)
         # end for
 
-    def analyze(self, phase, group, scheme_library, suite_vars, level):
+    def analyze(self, phase, group, scheme_library, suite_vars, level, parse_errors):
         """Analyze the VerticalLoop's interface to prepare for writing"""
         # Handle all the suite objects inside of this subcycle
         scheme_mods = set()
@@ -1737,7 +1734,7 @@ class VerticalLoop(SuiteObject):
         # Analyze our internal items
         for item in self.parts:
             smods = item.analyze(phase, group, scheme_library,
-                                 suite_vars, level+1)
+                                 suite_vars, level+1, parse_errors)
             for smod in smods:
                 scheme_mods.add(smod)
             # end for
@@ -1802,7 +1799,7 @@ class Subcycle(SuiteObject):
         scheme_mods = set()
         for item in self.parts:
             smods = item.analyze(phase, group, scheme_library,
-                                 suite_vars, level+1)
+                                 suite_vars, level+1, standard_names_errors)
             for smod in smods:
                 scheme_mods.add(smod)
             # end for
@@ -1844,7 +1841,7 @@ class TimeSplit(SuiteObject):
             self.add_part(new_item)
         # end for
 
-    def analyze(self, phase, group, scheme_library, suite_vars, level):
+    def analyze(self, phase, group, scheme_library, suite_vars, level, parse_errors):
         # Unused arguments are for consistent analyze interface
         # pylint: disable=unused-argument
         """Analyze the TimeSplit's interface to prepare for writing"""
@@ -1852,7 +1849,7 @@ class TimeSplit(SuiteObject):
         scheme_mods = set()
         for item in self.parts:
             smods = item.analyze(phase, group, scheme_library,
-                                 suite_vars, level+1)
+                                 suite_vars, level+1, parse_errors)
             for smod in smods:
                 scheme_mods.add(smod)
             # end for
@@ -2070,7 +2067,7 @@ class Group(SuiteObject):
         # end if
 
     def analyze(self, phase, suite_vars, scheme_library, ddt_library,
-                check_suite_state, set_suite_state):
+                check_suite_state, set_suite_state, parse_errors):
         """Analyze the Group's interface to prepare for writing"""
         self._ddt_library = ddt_library
         # Sanity check for Group
@@ -2083,7 +2080,7 @@ class Group(SuiteObject):
             # Items can be schemes, subcycles or other objects
             # All have the same interface and return a set of module use
             # statements (lschemes)
-            lschemes = item.analyze(phase, self, scheme_library, suite_vars, 1)
+            lschemes = item.analyze(phase, self, scheme_library, suite_vars, 1, parse_errors)
             for lscheme in lschemes:
                 self._local_schemes.add(lscheme)
             # end for
