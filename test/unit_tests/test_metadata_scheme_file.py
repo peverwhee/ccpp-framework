@@ -93,7 +93,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
         scheme_files = [os.path.join(self._sample_files_dir,
                                      "temp_adjust.meta")]
         # Exercise
-        scheme_headers, table_dict = parse_scheme_files(scheme_files,
+        scheme_headers, table_dict, _ = parse_scheme_files(scheme_files,
                                                         self._run_env)
         # Verify size of returned list equals number of scheme headers
         #   in the test file and that header (subroutine) names are
@@ -114,7 +114,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
         # Setup
         scheme_files = [os.path.join(self._sample_files_dir, "reorder.meta")]
         # Exercise
-        scheme_headers, table_dict = parse_scheme_files(scheme_files,
+        scheme_headers, table_dict, _ = parse_scheme_files(scheme_files,
                                                         self._run_env)
         # Verify size of returned list equals number of scheme headers
         #   in the test file and that header (subroutine) names are
@@ -251,7 +251,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
         scheme_files = [os.path.join(self._sample_files_dir,
                                      "CCPPeq1_var_in_fort_meta.meta")]
         # Exercise
-        scheme_headers, table_dict = parse_scheme_files(scheme_files,
+        scheme_headers, table_dict, _ = parse_scheme_files(scheme_files,
                                                         self._run_env_ccpp)
         # Verify size of returned list equals number of scheme headers in
         #   the test file (1) and that header (subroutine) name is
@@ -275,7 +275,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
                                      "CCPPgt1_var_in_fort_meta.meta")]
         # Exercise
         # Set CCPP directive to > 1
-        scheme_headers, table_dict = parse_scheme_files(scheme_files,
+        scheme_headers, table_dict, _ = parse_scheme_files(scheme_files,
                                                         self._run_env_ccpp2)
         # Verify size of returned list equals number of scheme headers
         #   in the test file (1) and that header (subroutine) name is
@@ -299,7 +299,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
                                      "CCPPgt1_var_in_fort_meta.meta")]
         # Exercise
         with self.assertRaises(CCPPError) as context:
-            _, _ = parse_scheme_files(scheme_files, self._run_env_ccpp)
+            _ = parse_scheme_files(scheme_files, self._run_env_ccpp)
         # Verify 3 correct error messages returned
         emsg = "Variable mismatch in CCPPgt1_var_in_fort_meta_init, " +       \
             "variables missing from Fortran scheme."
@@ -321,7 +321,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
                                      "CCPPeq1_var_missing_in_meta.meta")]
         # Exercise
         with self.assertRaises(CCPPError) as context:
-             _, _ = parse_scheme_files(scheme_files, self._run_env_ccpp)
+             _ = parse_scheme_files(scheme_files, self._run_env_ccpp)
         # Verify 3 correct error messages returned
         emsg = "Variable mismatch in CCPPeq1_var_missing_in_meta_finalize, "+ \
             "variables missing from metadata header."
@@ -338,7 +338,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
         # Setup
         scheme_files = [os.path.join(self._host_files_dir, "ddt2.meta")]
         # Exercise
-        scheme_headers, table_dict = parse_scheme_files(scheme_files,
+        scheme_headers, table_dict, _ = parse_scheme_files(scheme_files,
                                                         self._run_env_ccpp)
 
 if __name__ == "__main__":

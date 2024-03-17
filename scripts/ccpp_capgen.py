@@ -146,7 +146,7 @@ def add_error(error_string, new_error):
     '''Add an error (<new_error>) to <error_string>, separating errors by a
     newline'''
     if error_string:
-        error_string += '\n'
+        error_string += '\n    '
     # end if
     return error_string + new_error
 
@@ -387,13 +387,14 @@ def compare_fheader_to_mheader(meta_header, fort_header, logger):
 
 ###############################################################################
 def check_fortran_against_metadata(meta_headers, fort_headers,
-                                   mfilename, ffilename, logger):
+                                   mfilename, ffilename, logger, error=True):
 ###############################################################################
     """Compare a set of metadata headers from <mfilename> against the
     code in the associated Fortran file, <ffilename>.
     NB: This routine destroys the list, <fort_headers> but returns the
        contents in an association dictionary on successful completion."""
     header_dict = {} # Associate a Fortran header for every metadata header
+    errstr = ''
     for mheader in meta_headers:
         fheader = None
         mtitle = mheader.title
@@ -434,12 +435,14 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
     # end for
     if errors_found:
         num_errors = len(re.findall(r'\n', errors_found)) + 1
-        errmsg = "{}\n{} error{} found comparing {} to {}"
-        raise CCPPError(errmsg.format(errors_found, num_errors,
-                                      's' if num_errors > 1 else '',
-                                      mfilename, ffilename))
+        errmsg = "\n  {} error{} found comparing\n   {} to\n   {}: \n    {}"
+        errstr = errmsg.format(num_errors, 's' if num_errors > 1 else '',
+                               mfilename, ffilename, errors_found)
+        if error:
+            raise CCPPError(errstr)
+        # end if
     # end if
-    # No return, an exception is raised on error
+    return errstr
 
 ###############################################################################
 def duplicate_item_error(title, filename, itype, orig_item):
@@ -455,7 +458,7 @@ def duplicate_item_error(title, filename, itype, orig_item):
     raise CCPPError(errmsg.format(**edict))
 
 ###############################################################################
-def parse_host_model_files(host_filenames, host_name, run_env):
+def parse_host_model_files(host_filenames, host_name, run_env, error=True):
 ###############################################################################
     """
     Gather information from host files (e.g., DDTs, registry) and
@@ -465,12 +468,19 @@ def parse_host_model_files(host_filenames, host_name, run_env):
     table_dict = {}
     known_ddts = list()
     logger = run_env.logger
+    errstr = ''
     for filename in host_filenames:
         logger.info('Reading host model data from {}'.format(filename))
         # parse metadata file
-        mtables = parse_metadata_file(filename, known_ddts, run_env)
+        mtables, parse_object = parse_metadata_file(filename, known_ddts, run_env, error=error)
+        if parse_object.error_message:
+            errstr += parse_object.error_message
+        # end if
         fort_file = find_associated_fortran_file(filename)
         ftables = parse_fortran_file(fort_file, run_env)
+        for ftable in ftables:
+            errstr += '\n'.join(ftable.error_list)
+        # end for
         # Check Fortran against metadata (will raise an exception on error)
         mheaders = list()
         for sect in [x.sections() for x in mtables]:
@@ -480,8 +490,8 @@ def parse_host_model_files(host_filenames, host_name, run_env):
         for sect in [x.sections() for x in ftables]:
             fheaders.extend(sect)
         # end for
-        check_fortran_against_metadata(mheaders, fheaders,
-                                       filename, fort_file, logger)
+        errstr += check_fortran_against_metadata(mheaders, fheaders,
+                                       filename, fort_file, logger, error=error)
         # Check for duplicate tables, then add to dict
         for table in mtables:
             if table.table_name in table_dict:
@@ -508,10 +518,10 @@ def parse_host_model_files(host_filenames, host_name, run_env):
         host_name = None
     # end if
     host_model = HostModel(table_dict, host_name, run_env)
-    return host_model
+    return host_model, errstr
 
 ###############################################################################
-def parse_scheme_files(scheme_filenames, run_env):
+def parse_scheme_files(scheme_filenames, run_env, error=True):
 ###############################################################################
     """
     Gather information from scheme files (e.g., init, run, and finalize
@@ -521,12 +531,20 @@ def parse_scheme_files(scheme_filenames, run_env):
     header_dict = {} # To check for duplicates
     known_ddts = list()
     logger = run_env.logger
+    errstr = ''
     for filename in scheme_filenames:
         logger.info('Reading CCPP schemes from {}'.format(filename))
         # parse metadata file
-        mtables = parse_metadata_file(filename, known_ddts, run_env)
+        mtables, parse_object = parse_metadata_file(filename, known_ddts, run_env, error=error)
+        if parse_object.error_message:
+            errstr += '\n  Validity check errors:'
+            errstr += '\n    ' + parse_object.error_message
+        # end if
         fort_file = find_associated_fortran_file(filename)
         ftables = parse_fortran_file(fort_file, run_env)
+        for ftable in ftables:
+            errstr += '\n'.join(ftable.error_list)
+        # end for
         # Check Fortran against metadata (will raise an exception on error)
         mheaders = list()
         for sect in [x.sections() for x in mtables]:
@@ -536,8 +554,8 @@ def parse_scheme_files(scheme_filenames, run_env):
         for sect in [x.sections() for x in ftables]:
             fheaders.extend(sect)
         # end for
-        check_fortran_against_metadata(mheaders, fheaders,
-                                       filename, fort_file, logger)
+        errstr += check_fortran_against_metadata(mheaders, fheaders,
+                                       filename, fort_file, logger, error=error)
         # Check for duplicate tables, then add to dict
         for table in mtables:
             if table.table_name in table_dict:
@@ -560,7 +578,7 @@ def parse_scheme_files(scheme_filenames, run_env):
             # end if
         # end for
     # end for
-    return header_dict.values(), table_dict
+    return header_dict.values(), table_dict, errstr
 
 ###############################################################################
 def clean_capgen(cap_output_file, logger):
@@ -622,14 +640,14 @@ def capgen(run_env, return_db=False):
         raise CCPPError("--generate-docfiles not yet supported")
     # end if
     # First up, handle the host files
-    host_model = parse_host_model_files(host_files, host_name, run_env)
+    host_model, errstr_parse_host = parse_host_model_files(host_files, host_name, run_env, error=False)
     # We always need to parse the ccpp_constituent_prop_ptr_t DDT
     const_prop_mod = os.path.join(src_dir, "ccpp_constituent_prop_mod.meta")
     if const_prop_mod not in scheme_files:
         scheme_files = [const_prop_mod] + scheme_files
     # end if
     # Next, parse the scheme files
-    scheme_headers, scheme_tdict = parse_scheme_files(scheme_files, run_env)
+    scheme_headers, scheme_tdict, errstr_parse_scheme = parse_scheme_files(scheme_files, run_env, error=False)
     if run_env.verbose:
         ddts = host_model.ddt_lib.keys()
         if ddts:
@@ -661,6 +679,22 @@ def capgen(run_env, return_db=False):
         os.makedirs(outtemp_dir)
     # end if
     ccpp_api = API(sdfs, host_model, scheme_headers, run_env)
+    if ccpp_api.error_string or errstr_parse_host or errstr_parse_scheme:
+        error_string = ''
+        if errstr_parse_host:
+            error_string += '\nPARSE HOST ERRORS:'
+            error_string += errstr_parse_host
+        # end if
+        if errstr_parse_scheme:
+            error_string += '\nPARSE SCHEME ERRORS:'
+            error_string += errstr_parse_scheme
+        # end if
+        if ccpp_api.error_string:
+            error_string += '\nANALYZE ERRORS:'
+            error_string += ccpp_api.error_string
+        # end if
+        raise CCPPError(error_string)
+    # end if
     cap_filenames = ccpp_api.write(outtemp_dir, run_env)
     if run_env.generate_host_cap:
         # Create a cap file

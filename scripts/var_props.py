@@ -672,7 +672,7 @@ class VariableProperty:
         """Return True iff <test_name> is the name of this property"""
         return self.name.lower() == test_name.lower()
 
-    def valid_value(self, test_value, prop_dict=None, error=False):
+    def valid_value(self, test_value, prop_dict=None, error=False, error_list=None):
         """Return a valid version of <test_value> if it is valid.
         If <test_value> is not valid, return None or raise an exception,
         depending on the value of <error>.
@@ -755,8 +755,9 @@ class VariableProperty:
             # end if
         # end if
         # Call a check function?
+        errstr = ''
         if valid_val and (self._check_fn is not None):
-            valid_val = self._check_fn(valid_val, prop_dict, error)
+            valid_val = self._check_fn(valid_val, prop_dict, error, error_list=error_list)
         elif (valid_val is None) and error:
             emsg = "Invalid {} variable property, '{}'"
             raise CCPPError(emsg.format(self.name, test_value))
@@ -857,7 +858,7 @@ class VarCompatObj:
     def __init__(self, var1_stdname, var1_type, var1_kind, var1_units,
                  var1_dims, var1_lname, var1_top, var2_stdname, var2_type, var2_kind,
                  var2_units, var2_dims, var2_lname, var2_top, run_env, v1_context=None,
-                 v2_context=None):
+                 v2_context=None, error=True):
         """Initialize this object with information on the equivalence and/or
            conformability of two variables.
         variable 1 is described by <var1_stdname>, <var1_type>, <var1_kind>,
@@ -878,9 +879,11 @@ class VarCompatObj:
         self.__dim_transforms = None
         self.__kind_transforms = None
         self.__unit_transforms = None
+        self.__error_list = None
         self.has_vert_transforms = False
         incompat_reason = list()
-        # First, check for fatal incompatibilities
+        self.__errstr = ''
+        # Firsi, check for fatal incompatibilities
         if var1_stdname != var2_stdname:
             self.__equiv = False
             self.__compat = False
@@ -940,8 +943,10 @@ class VarCompatObj:
             if var1_units != var2_units:
                 self.__equiv = False
                 # Try to find a set of unit conversions
-                self.__unit_transforms = self._get_unit_convstrs(var1_units,
-                                                                 var2_units)
+                self.__unit_transforms, errstr = self._get_unit_convstrs(var1_units,
+                                                                         var2_units,
+                                                                         error=error)
+                self.__errstr += errstr
             # end if
         # end if
         if self.__compat:
@@ -966,6 +971,10 @@ class VarCompatObj:
             # end if
         # end if
         self.__incompat_reason = " and ".join([x for x in incompat_reason if x])
+
+    @property
+    def errstr(self):
+        return self.__errstr
 
     def forward_transform(self, lvar_lname, rvar_lname, rvar_indices, lvar_indices,
                           adjust_hdim=None, flip_vdim=None):
@@ -1053,7 +1062,8 @@ class VarCompatObj:
             elif self.__v1_kind:
                 kind = "_" + self.__v1_kind
             # end if
-            rhs_term = self.__unit_transforms[1].format(var=rhs_term, kind=kind)
+            if self.__unit_transforms[1]:
+                rhs_term = self.__unit_transforms[1].format(var=rhs_term, kind=kind)
         # end if
         return f"{lhs_term} = {rhs_term}"
 
@@ -1113,7 +1123,7 @@ class VarCompatObj:
         # end if
         return None
 
-    def _get_unit_convstrs(self, var1_units, var2_units):
+    def _get_unit_convstrs(self, var1_units, var2_units, error=True):
         """Attempt to retrieve the forward and reverse unit transformations
         for transforming a variable in <var1_units> to / from a variable in
         <var2_units>.
@@ -1139,11 +1149,11 @@ class VarCompatObj:
                                             v2_context=_DOCTEST_CONTEXT2)
 
         # Try some working unit transforms
-        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('m', 'mm')
+        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('m', 'mm')[0]
         ('1.0E+3{kind}*{var}', '1.0E-3{kind}*{var}')
-        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('kg kg-1', 'g kg-1')
+        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('kg kg-1', 'g kg-1')[0]
         ('1.0E+3{kind}*{var}', '1.0E-3{kind}*{var}')
-        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('C', 'K')
+        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('C', 'K')[0]
         ('{var}+273.15{kind}', '{var}-273.15{kind}')
 
         # Try an invalid conversion
@@ -1158,27 +1168,39 @@ class VarCompatObj:
         ...
         parse_source.ParseSyntaxError: Unsupported unit conversion, 'C' to 'm' for 'var_stdname'
         """
-        u1_str = self.units_to_string(var1_units, self.__v1_context)
-        u2_str = self.units_to_string(var2_units, self.__v2_context)
+        forward_transform = None
+        reverse_transform = None
+        u1_str, errstr = self.units_to_string(var1_units, self.__v1_context)
+        if errstr:
+            return (forward_transorm, reverse_transform), errstr
+        # end if
+        u2_str, errstr = self.units_to_string(var2_units, self.__v2_context)
+        if errstr:
+            return (forward_transorm, reverse_transform), errstr
+        # end if
         unit_conv_str = "{0}__to__{1}".format(u1_str, u2_str)
         try:
             forward_transform = getattr(unit_conversion, unit_conv_str)()
         except AttributeError:
-            emsg = "Unsupported unit conversion, '{}' to '{}' for '{}'"
-            raise ParseSyntaxError(emsg.format(var1_units, var2_units,
-                                               self.__stdname,
-                                               context=self.__v2_context))
+            emsg = f"Unsupported unit conversion, '{var1_units}' to '{var2_units}' for '{self.__stdname}'"
+            if error:
+                raise ParseSyntaxError(emsg)
+            # end if
+            errstr = emsg
+            return (forward_transform, reverse_transform), errstr
         # end if
         unit_conv_str = "{0}__to__{1}".format(u2_str, u1_str)
         try:
             reverse_transform = getattr(unit_conversion, unit_conv_str)()
         except AttributeError:
-            emsg = "Unsupported unit conversion, '{}' to '{}' for '{}'"
-            raise ParseSyntaxError(emsg.format(var2_units, var1_units,
-                                               self.__stdname,
-                                               context=self.__v1_context))
+            emsg = f"Unsupported unit conversion, '{var2_units}' to '{var1_units}' for '{self.__stdname}'"
+            if error:
+                raise ParseSyntaxError(emsg)
+            # end if
+            errstr = emsg
+            return (forward_transform, reverse_transform), errstr
         # end if
-        return (forward_transform, reverse_transform)
+        return (forward_transform, reverse_transform), errstr
 
     def _get_dim_transforms(self, var1_dims, var2_dims):
         """Attempt to find forward and reverse permutations for transforming a
@@ -1323,6 +1345,7 @@ class VarCompatObj:
         """Replace variable unit description with string that is a legal
         Python identifier.
         If the resulting string is a Python keyword, raise an exception."""
+        errstr = ''
         # Replace each whitespace with an underscore
         string = units.replace(" ","_")
         # Replace each minus sign with '_minus_'
@@ -1335,17 +1358,14 @@ class VarCompatObj:
         # end if
         # Test that the resulting string is a valid Python identifier
         if not string.isidentifier():
-            emsg = "Unsupported units entry for {}, '{}'{}"
             ctx = context_string(context)
-            raise ParseSyntaxError(emsg.format(self.__stdname, units ,ctx))
+            errstr = f"Unsupported units entry for {self.__stdname}, '{units}'{ctx}"
         # end if
         # Test that the resulting string is NOT a Python keyword
         if keyword.iskeyword(string):
-            emsg = "Invalid units entry, '{}', Python identifier"
-            raise ParseSyntaxError(emsg.format(units),
-                                   context=context)
+            errstr = "Invalid units entry, '{units}', Python identifier"
         # end if
-        return string
+        return string, errstr
 
     @staticmethod
     def __regularize_dimensions(dims):

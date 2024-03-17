@@ -118,7 +118,7 @@ class ParseObject(ParseContext):
                 # Oops, something went wrong, panic!
                 raise CCPPError(self.error_message)
             # end if
-            self.__error_message += '\n'
+            self.__error_message += '\n    '
         # end if
         if self.__num_errors < self._max_errors:
             if skip_context:

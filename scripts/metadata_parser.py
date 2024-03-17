@@ -111,7 +111,7 @@ def read_new_metadata(filename, module_name, table_name, scheme_name = None, sub
     if filename in NEW_METADATA_SAVE.keys():
         new_metadata_headers = NEW_METADATA_SAVE[filename]
     else:
-        new_metadata_headers = parse_metadata_file(filename, known_ddts=registered_fortran_ddt_names(),
+        new_metadata_headers, _ = parse_metadata_file(filename, known_ddts=registered_fortran_ddt_names(),
                                                                                 run_env=_DUMMY_RUN_ENV)
         NEW_METADATA_SAVE[filename] = new_metadata_headers
 

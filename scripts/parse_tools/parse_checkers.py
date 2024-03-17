@@ -21,7 +21,7 @@ _UNITS_REGEX                   = f"^({_UNIT_REGEX}(\s{_UNIT_REGEX})*|{_UNITLESS_
 _UNITS_RE                      = re.compile(_UNITS_REGEX)
 _MAX_MOLAR_MASS                = 10000.0
 
-def check_units(test_val, prop_dict, error):
+def check_units(test_val, prop_dict, error, error_list=None):
     """Return <test_val> if a valid unit, otherwise, None
     if <error> is True, raise an Exception if <test_val> is not valid.
     >>> check_units('m s-1', None, True)
@@ -30,8 +30,10 @@ def check_units(test_val, prop_dict, error):
     'kg m-3'
     >>> check_units('1', None, True)
     '1'
-    >>> check_units('', None, False)
-
+    >>> error_list = []
+    >>> check_units('', None, False, error_list=error_list)
+    >>> print(error_list)
+    ["'' is not a valid unit"]
     >>> check_units('', None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: '' is not a valid unit
@@ -47,6 +49,9 @@ def check_units(test_val, prop_dict, error):
             if error:
                 raise CCPPError("'{}' is not a valid unit".format(test_val))
             else:
+                if error_list is not None:
+                    error_list.append(f"'{test_val}' is not a valid unit")
+                # end if
                 test_val = None
             # end if
         # end if
@@ -54,12 +59,15 @@ def check_units(test_val, prop_dict, error):
         if error:
             raise CCPPError("'{}' is invalid; not a string".format(test_val))
         else:
+            if error_list is not None:
+                error_list.append(f"'{test_val}' is invalid; not a string")
+            # end if
             test_val = None
         # end if
     # end if
     return test_val
 
-def check_dimensions(test_val, prop_dict, error, max_len=0):
+def check_dimensions(test_val, prop_dict, error, error_list=None, max_len=0):
     """Return <test_val> if a valid dimensions list, otherwise, None
     If <max_len> > 0, each string in <test_val> must not be longer than
     <max_len>.
@@ -80,6 +88,13 @@ def check_dimensions(test_val, prop_dict, error, max_len=0):
     ['start1:', 'start2:end2']
     >>> check_dimensions(['start1 :end1', 'start2: end2'], None, False)
     ['start1 :end1', 'start2: end2']
+    >>> check_dimensions(['start:middle1:middle2:end'], None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    parse_source.CCPPError: 'start:middle1:middle2:end' is an invalid dimension range
+    >>> error_list = []
+    >>> check_dimensions(['start:middle1:middle2:end'], None, False, error_list=error_list)
+    >>> print(error_list)
+    ["'start:middle1:middle2:end' is an invalid dimension range"]
     >>> check_dimensions(['size(foo)'], None, False)
     ['size(foo)']
     >>> check_dimensions(['size(foo,1) '], None, False)
@@ -92,14 +107,24 @@ def check_dimensions(test_val, prop_dict, error, max_len=0):
     >>> check_dimensions(["dim1", "dim2name"], None, True, max_len=5) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 'dim2name' is too long (> 5 chars)
+    >>> error_list = []
+    >>> check_dimensions(["dim1", "dim2name"], None, False, max_len=5, error_list=error_list)
+    >>> print(error_list)
+    ["'dim2name' is too long (> 5 chars)"]
     >>> check_dimensions("hi_mom", None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 'hi_mom' is invalid; not a list
+    >>> check_dimensions("hi_mom", None, False, error_list=error_list)
+    >>> print(error_list)
+    ["'dim2name' is too long (> 5 chars)", "'hi_mom' is invalid; not a list"]
     """
     if not isinstance(test_val, list):
         if error:
             raise CCPPError("'{}' is invalid; not a list".format(test_val))
         else:
+            if error_list is not None:
+                error_list.append(f"'{test_val}' is invalid; not a list")
+            # end if
             test_val = None
         # end if
     else:
@@ -111,6 +136,9 @@ def check_dimensions(test_val, prop_dict, error, max_len=0):
                     errmsg = "'{}' is an invalid dimension range"
                     raise CCPPError(errmsg.format(item))
                 else:
+                    if error_list is not None:
+                        error_list.append(f"'{item}' is an invalid dimension range")
+                    # end if
                     test_val = None
                 # end if
                 break
@@ -123,8 +151,8 @@ def check_dimensions(test_val, prop_dict, error, max_len=0):
                     valid = isinstance(int(tdim), int)
                 except ValueError as ve:
                     # Not an integer, try a Fortran ID
-                    valid = check_fortran_id(tdim, None,
-                                             error, max_len=max_len) is not None
+                    valid = check_fortran_id(tdim, None, error, error_list=error_list,
+                                             max_len=max_len) is not None
                     if not valid:
                         # Check for size entry -- simple check
                         tcheck = tdim.strip().lower()
@@ -159,7 +187,7 @@ def check_dimensions(test_val, prop_dict, error, max_len=0):
 CF_ID = r"(?i)[a-z][a-z0-9_]*"
 __CFID_RE = re.compile(CF_ID+r"$")
 
-def check_cf_standard_name(test_val, prop_dict, error):
+def check_cf_standard_name(test_val, prop_dict, error, error_list=None):
     """Return <test_val> if a valid CF Standard Name, otherwise, None
     http://cfconventions.org/Data/cf-standard-names/docs/guidelines.html
     if <error> is True, raise an Exception if <test_val> is not valid.
@@ -169,7 +197,11 @@ def check_cf_standard_name(test_val, prop_dict, error):
 
     >>> check_cf_standard_name("hi mom", None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
-    CCPPError: 'hi_mom' is not a valid CF Standard Name
+    CCPPError: 'hi_mom' is not a valid CCPP Standard Name
+    >>> error_list = []
+    >>> check_cf_standard_name("hi mom", None, False, error_list=error_list)
+    >>> print(error_list)
+    ["'hi mom' is not a valid CCPP Standard Name"]
     >>> check_cf_standard_name("", None, False) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: CCPP Standard Name cannot be blank
@@ -192,6 +224,9 @@ def check_cf_standard_name(test_val, prop_dict, error):
             errmsg = "'{}' is not a valid CCPP Standard Name"
             raise CCPPError(errmsg.format(test_val))
         else:
+            if error_list is not None:
+                error_list.append(f"'{test_val}' is not a valid CCPP Standard Name")
+            # end if
             test_val = None
         # end if
     else:
@@ -232,7 +267,7 @@ _REGISTERED_FORTRAN_DDT_NAMES = list()
 
 ########################################################################
 
-def check_fortran_id(test_val, prop_dict, error, max_len=0):
+def check_fortran_id(test_val, prop_dict, error, error_list=None, max_len=0):
     """Return <test_val> if a valid Fortran identifier, otherwise, None
     If <max_len> > 0, <test_val> must not be longer than <max_len>.
     if <error> is True, raise an Exception if <test_val> is not valid.
@@ -248,6 +283,10 @@ def check_fortran_id(test_val, prop_dict, error, max_len=0):
     >>> check_fortran_id("hi mom", None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 'hi_mom' is not a valid Fortran identifier
+    >>> error_list = []
+    >>> check_fortran_id("hi mom", None, False, error_list=error_list)
+    >>> print(error_list)
+    ["'hi mom' is not a valid Fortran identifier"]
     >>> check_fortran_id("", None, False)
 
     >>> check_fortran_id("_hi_mom", None, False)
@@ -262,12 +301,18 @@ def check_fortran_id(test_val, prop_dict, error, max_len=0):
         if error:
             raise CCPPError("'{}' is not a valid Fortran identifier".format(test_val))
         else:
+            if error_list is not None:
+                error_list.append(f"'{test_val}' is not a valid Fortran identifier")
+            # end if
             test_val = None
         # end if
     elif (max_len > 0) and (len(test_val) > max_len):
         if error:
             raise CCPPError("'{}' is too long (> {} chars)".format(test_val, max_len))
         else:
+            if error_list is not None:
+                error_list.append(f"'{test_val}' is too long (> {max_len} chars)")
+            # end if
             test_val = None
         # end if
     # end if
@@ -305,7 +350,7 @@ def fortran_list_match(test_str):
 
 ########################################################################
 
-def check_fortran_ref(test_val, prop_dict, error, max_len=0):
+def check_fortran_ref(test_val, prop_dict, error, error_list=None, max_len=0):
     """Return <test_val> if a valid simple Fortran variable reference,
     otherwise, None. A simple Fortran variable reference is defined as
     a scalar id or a scalar array reference.
@@ -351,12 +396,20 @@ def check_fortran_ref(test_val, prop_dict, error, max_len=0):
     >>> check_fortran_ref("foo( bar, )", None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 'foo( bar, )' is not a valid Fortran scalar reference
+    >>> error_list = []
+    >>> check_fortran_ref("foo( bar, )", None, False, error_list=error_list)
+    >>> print(error_list)
+    ["'foo( bar, )' is not a valid Fortran identifier", "'foo( bar, )' is not a valid Fortran scalar reference"]
     >>> check_fortran_ref("foo()", None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 'foo()' is not a valid Fortran scalar reference
     >>> check_fortran_ref("foo(bar, bazz)", None, True, max_len=3) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 'bazz' is too long (> 3 chars) in foo(bar, bazz)
+    >>> error_list = []
+    >>> check_fortran_ref("foo(bar, bazz)", None, False, max_len=3, error_list=error_list)
+    >>> print(error_list)
+    ["'foo(bar, bazz)' is not a valid Fortran identifier", "'bazz' is too long (> 3 chars) in foo(bar, bazz)"]
     >>> check_fortran_ref("foo(barr, baz)", None, True, max_len=3) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 'bazr' is too long (> 3 chars) in foo(barr, baz)
@@ -364,7 +417,7 @@ def check_fortran_ref(test_val, prop_dict, error, max_len=0):
     Traceback (most recent call last):
     CCPPError: 'foo' is too long (> 3 chars) in fooo(bar, baz)
     """
-    idval = check_fortran_id(test_val, prop_dict, False, max_len=max_len)
+    idval = check_fortran_id(test_val, prop_dict, False, error_list=error_list, max_len=max_len)
     if idval is None:
         match = FORTRAN_SCALAR_REF_RE.match(test_val)
         if match is None:
@@ -372,6 +425,9 @@ def check_fortran_ref(test_val, prop_dict, error, max_len=0):
                 emsg = "'{}' is not a valid Fortran scalar reference"
                 raise CCPPError(emsg.format(test_val))
             else:
+                if error_list is not None:
+                    error_list.append(f"'{test_val}' is not a valid Fortran scalar reference")
+                # end if
                 test_val = None
             # end if
         elif max_len > 0:
@@ -384,6 +440,9 @@ def check_fortran_ref(test_val, prop_dict, error, max_len=0):
                         emsg = "'{}' is too long (> {} chars) in {}"
                         raise CCPPError(emsg.format(token, max_len, test_val))
                     else:
+                        if error_list is not None:
+                            error_list.append(f"'{token}' is too long (> {max_len} chars) in {test_val}")
+                        # end if
                         test_val = None
                         break
                     # end if
@@ -395,7 +454,7 @@ def check_fortran_ref(test_val, prop_dict, error, max_len=0):
 
 ########################################################################
 
-def check_local_name(test_val, prop_dict, error, max_len=0):
+def check_local_name(test_val, prop_dict, error, error_list=None, max_len=0):
     """Return <test_val> if a valid simple Fortran variable reference,
     or Fortran constant, otherwise, None.
     A simple Fortran variable reference is defined as a scalar id or a
@@ -442,18 +501,18 @@ def check_local_name(test_val, prop_dict, error, max_len=0):
     else:
         kind = ""
     # end if
-    if protected and vtype and check_fortran_literal(test_val, vtype, kind):
+    if protected and vtype and check_fortran_literal(test_val, vtype, kind, error_list=error_list):
         valid_val = test_val
     # end if
     if valid_val is None:
-        valid_val = check_fortran_ref(test_val, prop_dict, error, max_len=max_len)
+        valid_val = check_fortran_ref(test_val, prop_dict, error, error_list=error_list, max_len=max_len)
     # end if
     return valid_val
 
 
 ########################################################################
 
-def check_fortran_intrinsic(typestr, error=False):
+def check_fortran_intrinsic(typestr, error=False, error_list=None):
     """Return <test_val> if a valid Fortran intrinsic type, otherwise, None
     if <error> is True, raise an Exception if <test_val> is not valid.
     >>> check_fortran_intrinsic("real", error=False)
@@ -477,6 +536,10 @@ def check_fortran_intrinsic(typestr, error=False):
     >>> check_fortran_intrinsic("char", error=True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 'char' is not a valid Fortran type
+    >>> error_list = []
+    >>> check_fortran_intrinsic("char", error=False, error_list=error_list)
+    >>> print(error_list)
+    ["'char' is not a valid Fortran type"]
     >>> check_fortran_intrinsic("int")
 
     >>> check_fortran_intrinsic("char", error=False)
@@ -496,6 +559,9 @@ def check_fortran_intrinsic(typestr, error=False):
         if error:
             raise CCPPError("'{}' is not a valid Fortran type".format(typestr))
         else:
+            if error_list is not None:
+                error_list.append(f"'{typestr}' is not a valid Fortran type")
+            # end if
             typestr = None
         # end if
     # end if
@@ -503,7 +569,7 @@ def check_fortran_intrinsic(typestr, error=False):
 
 ########################################################################
 
-def check_fortran_type(typestr, prop_dict, error):
+def check_fortran_type(typestr, prop_dict, error, error_list=None):
     """Return <typestr> if a valid Fortran type, otherwise, None
     if <error> is True, raise an Exception if <typestr> is not valid.
     >>> check_fortran_type("real", None, False)
@@ -537,6 +603,10 @@ def check_fortran_type(typestr, prop_dict, error):
     >>> check_fortran_type("type(hi mom)", {}, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 'type(hi mom)' is not a valid derived Fortran type
+    >>> error_list = []
+    >>> check_fortran_type("type(hi mom)", {}, False, error_list=error_list)
+    >>> print(error_list)
+    ["'type(hi mom)' is not a valid derived Fortran type"]
     """
     dt = ""
     match = check_fortran_intrinsic(typestr, error=False)
@@ -549,6 +619,9 @@ def check_fortran_type(typestr, prop_dict, error):
             emsg = "'{}' is not a valid{} Fortran type"
             raise CCPPError(emsg.format(typestr, dt))
         else:
+            if error_list is not None:
+                error_list.append(f"'{typestr}' is not a valid{dt} Fortran type")
+            # end if
             typestr = None
         # end if
     # end if
@@ -556,7 +629,7 @@ def check_fortran_type(typestr, prop_dict, error):
 
 ########################################################################
 
-def check_fortran_literal(value, typestr, kind):
+def check_fortran_literal(value, typestr, kind, error_list=None):
     """Return True iff <value> is a valid Fortran literal of type, <typestr>.
     Note: no attempt is made to handle the older D syntax for real literals.
     To promote clean coding, real values MUST have a decimal point, however,
@@ -643,6 +716,7 @@ def check_fortran_literal(value, typestr, kind):
     >>> check_fortran_literal("123._kp", "float", "kp") #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseInternalError: ERROR: 'float' is not a Fortran intrinsic type
+
     """
     valid = True
     if FORTRAN_DP_RE.match(typestr.strip()) is not None:
@@ -728,7 +802,7 @@ def check_fortran_literal(value, typestr, kind):
     # end if
     return valid
 
-def check_default_value(test_val, prop_dict, error):
+def check_default_value(test_val, prop_dict, error, error_list=None):
     """Return <test_val> if a valid default value for a CCPP field,
          otherwise, None.
     If <error> is True, raise an Exception if <value> is not valid.
@@ -741,6 +815,10 @@ def check_default_value(test_val, prop_dict, error):
     >>> check_default_value('314', {'type':'integer', 'kind':'ikind'}, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: 314 is not a valid Fortran integer of kind, ikind
+    >>> error_list = []
+    >>> check_default_value('314', {'type':'integer', 'kind':'ikind'}, False, error_list=error_list)
+    >>> print(error_list)
+    ['314 is not a valid Fortran integer of kind, ikind']
     >>> check_default_value('314_ikind', {'type':'integer', 'kind':'ikind'}, True)
     '314_ikind'
     >>> check_default_value('314', {'type':'real'}, False)
@@ -755,6 +833,10 @@ def check_default_value(test_val, prop_dict, error):
     >>> check_default_value('314', {'local_name':'foo'}, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: foo does not have a 'type' attribute
+    >>> error_list = []
+    >>> check_default_value('314', {'local_name':'foo'}, False, error_list=error_list)
+    >>> print(error_list)
+    ["foo does not have a 'type' attribute"]
     >>> check_default_value('314', {'tipe':'integer'}, False)
 
     >>> check_default_value('314', None, True)
@@ -769,37 +851,44 @@ def check_default_value(test_val, prop_dict, error):
         else:
             vkind = ''
         # end if
-        if not check_fortran_literal(test_val, var_type, vkind):
+        if not check_fortran_literal(test_val, var_type, vkind, error_list=error_list):
             valid = None
+            emsg = f"{test_val} is not a valid Fortran {var_type}"
+            if vkind:
+                emsg += f" of kind, {vkind}"
+            # end if
             if error:
-                emsg = '{} is not a valid Fortran {}'
-                if vkind:
-                    emsg += ' of kind, {}'
-                raise CCPPError(emsg.format(test_val, var_type, vkind))
+                raise CCPPError(emsg)
+            elif error_list is not None:
+                error_list.append(emsg)
             # end if
         # end if (no else, <test_val> is okay)
     elif prop_dict is None:
         # Special case for checks during parsing, always pass
         valid = test_val
-    elif error:
-        emsg = "{} does not have a 'type' attribute"
+    else:
         if 'local_name' in prop_dict:
             lname = prop_dict['local_name']
         else:
             lname = 'UNKNOWN'
         # end if
-        raise CCPPError(emsg.format(lname))
+        emsg = f"{lname} does not have a 'type' attribute"
+        if error:
+            raise CCPPError(emsg)
+        elif error_list is not None:
+            error_list.append(emsg)
+        # end if
     # end if
     return valid
 
-def check_valid_values(test_val, prop_dict, error):
+def check_valid_values(test_val, prop_dict, error, error_list=None):
     """Return <test_val> if a valid 'valid_values' attribute value,
          otherwise, None.
     If <error> is True, raise an Exception if <value> is not valid.
     """
     raise ParseInternalError("NOT IMPLEMENTED")
 
-def check_diagnostic_fixed(test_val, prop_dict, error):
+def check_diagnostic_fixed(test_val, prop_dict, error, error_list=None):
     """Return <test_val> if a valid descriptor for a CCPP diagnostic,
          otherwise, None.
     If <error> is True, raise an Exception if <value> is not valid.
@@ -816,39 +905,51 @@ def check_diagnostic_fixed(test_val, prop_dict, error):
     >>> check_diagnostic_fixed("foo", {'diagnostic_name':'foo','local_name':'hi','standard_name':'mom'}, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: hi (mom) cannot have both 'diagnostic_name' and 'diagnostic_name_fixed' attributes
+    >>> error_list = []
+    >>> check_diagnostic_fixed("foo", {'diagnostic_name':'foo','local_name':'hi','standard_name':'mom'}, False, error_list=error_list)
+    >>> print(error_list)
+    ["hi (mom) cannot have both 'diagnostic_name' and 'diagnostic_name_fixed' attributes"]
     >>> check_diagnostic_fixed("2foo", {'diagnostic_name_fixed':'foo','local_name':'hi','standard_name':'mom'}, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: '2foo' (hi) is not a valid fixed diagnostic name
+    >>> error_list = []
+    >>> check_diagnostic_fixed("2foo", {'diagnostic_name_fixed':'foo','local_name':'hi','standard_name':'mom'}, False, error_list=error_list)
+    >>> print(error_list)
+    ["'2foo' is not a valid Fortran identifier", "'2foo' (hi) is not a valid fixed diagnostic name"]
     """
     valid = test_val
     if (prop_dict and ('diagnostic_name' in prop_dict) and
         prop_dict['diagnostic_name']):
         valid = None
-        if error:
-            emsg = "{} ({}) cannot have both 'diagnostic_name' and "
-            emsg += "'diagnostic_name_fixed' attributes"
-            if 'local_name' in prop_dict:
-                lname = prop_dict['local_name']
-            else:
-                lname = 'UNKNOWN'
-            # end if
-            if 'standard_name' in prop_dict:
-                sname = prop_dict['standard_name']
-            else:
-                sname = 'UNKNOWN'
-            # end if
-            raise CCPPError(emsg.format(lname, sname))
+        if 'local_name' in prop_dict:
+            lname = prop_dict['local_name']
+        else:
+            lname = 'UNKNOWN'
         # end if
-    elif check_fortran_id(test_val, prop_dict, False) is None:
-        valid = None
+        if 'standard_name' in prop_dict:
+            sname = prop_dict['standard_name']
+        else:
+            sname = 'UNKNOWN'
+        # end if
+        emsg = f"{lname} ({sname}) cannot have both 'diagnostic_name' and "
+        emsg += "'diagnostic_name_fixed' attributes"
         if error:
-            emsg = "'{}' ({}) is not a valid fixed diagnostic name"
-            if 'local_name' in prop_dict:
-                lname = prop_dict['local_name']
-            else:
-                lname = 'UNKNOWN'
-            # end if
+            raise CCPPError(emsg)
+        elif error_list is not None:
+            error_list.append(emsg)
+        # end if
+    elif check_fortran_id(test_val, prop_dict, False, error_list=error_list) is None:
+        valid = None
+        if 'local_name' in prop_dict:
+            lname = prop_dict['local_name']
+        else:
+            lname = 'UNKNOWN'
+        # end if
+        emsg = f"'{test_val}' ({lname}) is not a valid fixed diagnostic name"
+        if error:
             raise CCPPError(emsg.format(test_val, lname))
+        elif error_list is not None:
+            error_list.append(emsg)
         # end if
     # end if
     return valid
@@ -860,7 +961,7 @@ _DIAG_SUFF = r"([_0-9A-Za-z]+)?"
 _DIAG_PROP = r"((\${process}|\${scheme_name})"+_DIAG_SUFF+r")"
 _DIAG_RE = re.compile(_DIAG_PRE+_DIAG_PROP+r"?$")
 
-def check_diagnostic_id(test_val, prop_dict, error):
+def check_diagnostic_id(test_val, prop_dict, error, error_list=None):
     """Return <test_val> if a valid descriptor for a CCPP diagnostic,
         otherwise, None.
     If <error> is True, raise an Exception if <value> is not valid.
@@ -905,35 +1006,46 @@ def check_diagnostic_id(test_val, prop_dict, error):
     >>> check_diagnostic_id("foo", {'diagnostic_name_fixed':'foo','local_name':'hi','standard_name':'mom'}, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: hi (mom) cannot have both 'diagnostic_name' and 'diagnostic_name_fixed' attributes
+    >>> error_list = []
+    >>> check_diagnostic_id("foo", {'diagnostic_name_fixed':'foo','local_name':'hi','standard_name':'mom'}, False, error_list=error_list)
+    >>> print(error_list)
+    ["hi (mom) cannot have both 'diagnostic_name' and 'diagnostic_name_fixed' attributes"]
     >>> check_diagnostic_id("2foo", {'diagnostic_name':'foo','local_name':'hi','standard_name':'mom'}, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: '2foo' (hi) is not a valid diagnostic name
+    >>> check_diagnostic_id("2foo", {'diagnostic_name':'foo','local_name':'hi','standard_name':'mom'}, False, error_list=error_list)
+    >>> print(error_list)
+    ["hi (mom) cannot have both 'diagnostic_name' and 'diagnostic_name_fixed' attributes", "'2foo' is not a valid diagnostic_name value"]
     """
     if (prop_dict and ('diagnostic_name_fixed' in prop_dict) and
         prop_dict['diagnostic_name_fixed']):
         valid = None
+        if 'local_name' in prop_dict:
+            lname = prop_dict['local_name']
+        else:
+            lname = 'UNKNOWN'
+        # end if
+        if 'standard_name' in prop_dict:
+            sname = prop_dict['standard_name']
+        else:
+            sname = 'UNKNOWN'
+        # end if
+        emsg = f"{lname} ({sname}) cannot have both 'diagnostic_name' and "
+        emsg += "'diagnostic_name_fixed' attributes"
         if error:
-            emsg = "{} ({}) cannot have both 'diagnostic_name' and "
-            emsg += "'diagnostic_name_fixed' attributes"
-            if 'local_name' in prop_dict:
-                lname = prop_dict['local_name']
-            else:
-                lname = 'UNKNOWN'
-            # end if
-            if 'standard_name' in prop_dict:
-                sname = prop_dict['standard_name']
-            else:
-                sname = 'UNKNOWN'
-            # end if
-            raise CCPPError(emsg.format(lname, sname))
+            raise CCPPError(emsg)
+        elif error_list is not None:
+            error_list.append(emsg)
         # end if
     else:
         match = _DIAG_RE.match(test_val)
         if match is None:
             valid = None
+            emsg = f"'{test_val}' is not a valid diagnostic_name value"
             if error:
-                emsg = "'{}' is not a valid diagnostic_name value"
-                raise CCPPError(emsg.format(test_val))
+                raise CCPPError(emsg)
+            elif error_list is not None:
+                error_list.append(emsg)
             # end if
         else:
             valid = test_val
@@ -943,7 +1055,7 @@ def check_diagnostic_id(test_val, prop_dict, error):
 
 ########################################################################
 
-def check_molar_mass(test_val, prop_dict, error):
+def check_molar_mass(test_val, prop_dict, error, error_list=None):
     """Return <test_val> if valid molar mass, otherwise, None
     if <error> is True, raise an Exception if <test_val> is not valid.
     >>> check_molar_mass('1', None, True)
@@ -963,12 +1075,20 @@ def check_molar_mass(test_val, prop_dict, error):
     >>> check_molar_mass('-1', None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: '-1' is not a valid molar mass
+    >>> error_list = []
+    >>> check_molar_mass('-1', None, False, error_list=error_list)
+    >>> print(error_list)
+    ['-1.0 is not a valid molar mass']
     >>> check_molar_mass('-1.0', None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: '-1.0' is not a valid molar mass
     >>> check_molar_mass('string', None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
-    CCPPError: '-1.0' is not a valid molar mass
+    CCPPError: 'string' is invalid; not a float or int
+    >>> error_list = []
+    >>> check_molar_mass('string', None, False, error_list=error_list)
+    >>> print(error_list)
+    ["'string' is invalid; not a float or int"]
     >>> check_molar_mass(10001, None, True) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     CCPPError: '10001' is not a valid molar mass
@@ -980,14 +1100,20 @@ def check_molar_mass(test_val, prop_dict, error):
            if error:
                raise CCPPError(f"{test_val} is not a valid molar mass")
            else:
+               if error_list is not None:
+                   error_list.append(f"{test_val} is not a valid molar mass")
+                # end if
                test_val = None
            # end if
         # end if
     except:
         # not an int or float, conditionally throw error
         if error:
-           raise CCPPError(f"{test_val} is invalid; not a float or int")
+           raise CCPPError(f"'{test_val}' is invalid; not a float or int")
         else:
+           if error_list is not None:
+               error_list.append(f"'{test_val}' is invalid; not a float or int")
+           # end if
            test_val=None
         # end if
     # end try

@@ -275,6 +275,7 @@ class Var:
         self.__children = list() # This Var's array references
         self.__clone_source = clone_source
         self.__run_env = run_env
+        self.__error_list = []
         if isinstance(prop_dict, Var):
             prop_dict = prop_dict.copy_prop_dict()
         # end if
@@ -362,8 +363,7 @@ class Var:
         try:
             for prop_name, prop_val in self.var_properties():
                 prop = Var.get_prop(prop_name)
-                _ = prop.valid_value(prop_val,
-                                     prop_dict=self._prop_dict, error=True)
+                _ = prop.valid_value(prop_val, prop_dict=self._prop_dict, error=True)
             # end for
         except CCPPError as cperr:
             lname = self._prop_dict['local_name']
@@ -372,7 +372,7 @@ class Var:
                                    context=self.context) from cperr
         # end try
 
-    def compatible(self, other, run_env):
+    def compatible(self, other, run_env, error=True):
         """Return a VarCompatObj object which describes the equivalence,
         compatibility, or incompatibility between <self> and <other>.
         """
@@ -394,7 +394,7 @@ class Var:
         odims = other.get_dimensions()
         compat = VarCompatObj(sstd_name, stype, skind, sunits, sdims, sloc_name, stopp,
                               ostd_name, otype, okind, ounits, odims, oloc_name, otopp,
-                              run_env,
+                              run_env, error=error,
                               v1_context=self.context, v2_context=other.context)
         if (not compat) and (run_env.logger is not None):
             incompat_str = compat.incompat_reason
@@ -846,6 +846,11 @@ class Var:
     def constituent_property_names(cls):
         """Return a list of the names of constituent properties"""
         return Var.__constituent_prop_dict.keys()
+
+    @property
+    def error_list(self):
+        """Return this variable's error list"""
+        return self.__error_list
 
     @property
     def parent(self):
@@ -1528,6 +1533,7 @@ class VarDictionary(OrderedDict):
         self.__name = name
         self.__run_env = run_env
         self.__parent_dict = parent_dict
+        self.__error_list = []
         if parent_dict is not None:
             parent_dict.add_sub_scope(self)
         # end if
@@ -1564,6 +1570,11 @@ class VarDictionary(OrderedDict):
         """Return the parent dictionary of this dictionary"""
         return self.__parent_dict
 
+    @property
+    def error_list(self):
+        """Return the list of errors for this dictionary"""
+        return self.__error_list
+
     @staticmethod
     def include_var_in_list(var, std_vars, loop_vars, consts):
         """Return True iff <var> is of a type allowed by the logicals,
@@ -1580,6 +1591,19 @@ class VarDictionary(OrderedDict):
             include_var = std_vars and std_var
         # end if
         return include_var
+
+    def add_error(self, errstr):
+        """Add error to error_list"""
+        self.__error_list.append(errstr)
+
+    def prepare_errors(self):
+        """Prepare error string for this error_list"""
+        if len(self.error_list) > 1:
+            errstr = f'\n  {len(self.error_list)} errors found when analyzing {self.name}:\n    '
+        else:
+            errstr = f'\n  {len(self.error_list)} error found when analyzing {self.name}:\n    '
+        errstr += '\n    '.join(self.error_list)
+        return errstr
 
     def variable_list(self, recursive=False,
                       std_vars=True, loop_vars=True, consts=True):
@@ -1625,8 +1649,9 @@ class VarDictionary(OrderedDict):
                                    token=standard_name, context=newvar.context)
         # end if
         if cvar is not None:
-            compat = cvar.compatible(newvar, run_env)
-            if compat:
+            compat = cvar.compatible(newvar, run_env, error=False)
+            errstr = compat.errstr
+            if compat and not errstr:
                 # Check for intent mismatch
                 vintent = cvar.get_prop_value('intent')
                 dintent = newvar.get_prop_value('intent')
@@ -1651,7 +1676,7 @@ class VarDictionary(OrderedDict):
                                                     nlname, dintent, nctx))
                     # end if
                 # end if
-            else:
+            elif not errstr:
                 if self.__run_env.logger is not None:
                     emsg = "Attempt to add incompatible variable, {} from {}"
                     emsg += "\n{}".format(compat.incompat_reason)

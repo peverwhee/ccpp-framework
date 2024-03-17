@@ -844,6 +844,7 @@ class SuiteObject(VarDictionary):
         new_vdims = list()
         var_vdim = var.has_vertical_dimension(dims=vdims)
         compat_obj = None
+        errstr = None
         # Does this variable exist in the calling tree?
         dict_var = self.find_variable(source_var=var, any_scope=True)
         if dict_var is None:
@@ -879,7 +880,7 @@ class SuiteObject(VarDictionary):
             # end if
             # Create compatability object, containing any necessary forward/reverse 
             # transforms from <var> and <dict_var>
-            compat_obj = var.compatible(dict_var, run_env)
+            compat_obj = var.compatible(dict_var, run_env, error=False)
             # If variable is defined as "inactive" by the host, ensure that
             # this variable is declared as "optional" by the scheme. If
             # not satisfied, return error.
@@ -911,8 +912,9 @@ class SuiteObject(VarDictionary):
                     # end if
                 # end if
             # end if
+            errstr = compat_obj.errstr
         # end if
-        return found_var, dict_var, var_vdim, new_vdims, missing_vert, compat_obj
+        return found_var, dict_var, var_vdim, new_vdims, missing_vert, compat_obj, errstr
 
     def in_process_split(self):
         """Find out if we are in a process-split region"""
@@ -1167,7 +1169,10 @@ class Scheme(SuiteObject):
             vdims = var.get_dimensions()
             vintent = var.get_prop_value('intent')
             args = self.match_variable(var, self.run_env)
-            found, dict_var, vert_dim, new_dims, missing_vert, compat_obj = args
+            found, dict_var, vert_dim, new_dims, missing_vert, compat_obj, errstr = args
+            if errstr:
+                self.add_error(errstr)
+            # end if
             if found:
                 if self.__group.run_env.debug:
                     # Add variable allocation checks for group, suite and host variables
@@ -1211,20 +1216,22 @@ class Scheme(SuiteObject):
                     # We still need it in our call list (the group uses a clone)
                     self.add_call_list_variable(var)
                 else:
-                    errmsg = 'Input argument for {}, {}, not found.'
+                    errmsg = f'Input argument for {self.subroutine_name}, {vstdname}, not found.'
+#                    errmsg = 'Input argument for {}, {}, not found.'
                     if self.find_variable(source_var=var) is not None:
                         # The variable exists, maybe it is dim mismatch
                         lname = var.get_prop_value('local_name')
-                        emsg = '\nCheck for dimension mismatch in {}'
-                        errmsg += emsg.format(lname)
+                        emsg = f'\nCheck for dimension mismatch in {lname}'
+                        errmsg += emsg
                     # end if
                     if ((not self.run_phase()) and
                         (vstdname in CCPP_LOOP_VAR_STDNAMES)):
-                        emsg = '\nLoop variables not allowed in {} phase.'
-                        errmsg += emsg.format(self.phase())
+                        emsg = f'\nLoop variables not allowed in {self.phase()} phase.'
+                        errmsg += emsg
                     # end if
-                    raise CCPPError(errmsg.format(self.subroutine_name,
-                                                  vstdname))
+                    self.add_error(errmsg)
+#                    raise CCPPError(errmsg.format(self.subroutine_name,
+#                                                  vstdname))
                 # end if
             # end if
             # Are there any forward/reverse transforms for this variable?
@@ -1232,8 +1239,10 @@ class Scheme(SuiteObject):
             if compat_obj is not None and (compat_obj.has_vert_transforms or
                                            compat_obj.has_unit_transforms or
                                            compat_obj.has_kind_transforms):
-                self.add_var_transform(var, compat_obj, vert_dim)
-                has_transform = True
+                if len(self.error_list) == 0:
+                   self.add_var_transform(var, compat_obj, vert_dim)
+                   has_transform = True
+                # end if
             # end if
 
             # Is this a conditionally allocated variable?

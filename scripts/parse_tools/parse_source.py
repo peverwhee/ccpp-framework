@@ -202,7 +202,7 @@ class ParseContext():
     """A class for keeping track of a parsing position
     >>> ParseContext(32, "source.F90") #doctest: +ELLIPSIS
     <parse_tools.parse_source.ParseContext object at 0x...>
-    >>> ParseContext("source.F90", 32)
+    >>> ParseContext("source.F90", 32) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     parse_tools.parse_source.CCPPError: ParseContext linenum must be an int
     >>> ParseContext(32, 90) #doctest: +IGNORE_EXCEPTION_DETAIL

@@ -179,7 +179,7 @@ def _parse_config_line(line, context):
 
 ########################################################################
 
-def parse_metadata_file(filename, known_ddts, run_env):
+def parse_metadata_file(filename, known_ddts, run_env, error=True):
     """Parse <filename> and return list of parsed metadata tables"""
     # Read all lines of the file at once
     meta_tables = []
@@ -196,7 +196,7 @@ def parse_metadata_file(filename, known_ddts, run_env):
     while curr_line is not None:
         if MetadataTable.table_start(curr_line):
             new_table = MetadataTable(run_env, parse_object=parse_obj,
-                                      known_ddts=known_ddts)
+                                      known_ddts=known_ddts, error=error)
             ntitle = new_table.table_name
             if ntitle not in table_titles:
                 meta_tables.append(new_table)
@@ -217,7 +217,7 @@ def parse_metadata_file(filename, known_ddts, run_env):
                                    context=parse_obj)
         # end if
     # end while
-    return meta_tables
+    return meta_tables, parse_obj
 
 ########################################################################
 
@@ -271,7 +271,7 @@ class MetadataTable():
 
     def __init__(self, run_env, table_name_in=None, table_type_in=None,
                  dependencies=None, relative_path=None, known_ddts=None,
-                 var_dict=None, module=None, parse_object=None):
+                 var_dict=None, module=None, parse_object=None, error=True):
         """Initialize a MetadataTable, either with a name, <table_name_in>, and
         type, <table_type_in>, or with information from a file (<parse_object>).
         if <parse_object> is None, <dependencies> and <relative_path> are
@@ -285,6 +285,8 @@ class MetadataTable():
         self.__relative_path = relative_path
         self.__sections = []
         self.__run_env = run_env
+        self.__error = error
+        self.__error_list = []
         if parse_object is None:
             if table_name_in is not None:
                 self.__table_name = table_name_in
@@ -315,7 +317,7 @@ class MetadataTable():
                     self.__table_name = fnam or stitle
                 # end if
                 sect = MetadataSection(self.table_name, self.table_type,
-                                       run_env, title=stitle,
+                                       run_env, parse_object=self.__pobj, title=stitle,
                                        type_in=self.table_type, module=module,
                                        var_dict=var_dict, known_ddts=known_ddts)
                 self.__sections.append(sect)
@@ -434,7 +436,11 @@ class MetadataTable():
         # end while
         if self.__pobj.error_message:
             # Time to dump out error messages
-            raise CCPPError(self.__pobj.error_message)
+            if self.__error:
+                raise CCPPError(self.__pobj.error_message)
+            else:
+                self.add_error(self.__pobj.error_message)
+            # end if
         # end if
         if self.table_type == "ddt":
             known_ddts.append(self.table_name)
@@ -454,6 +460,15 @@ class MetadataTable():
             # Return a copy so it cannot be modified
             return list(self.__sections)
         return self.__sections
+
+    def add_error(self, errmsg):
+        """Append error to error list"""
+        self.__error_list.append(errmsg)
+
+    @property
+    def error_list(self):
+        """Return the list of parsing errors for this table"""
+        return self.__error_list
 
     @property
     def table_name(self):
@@ -868,6 +883,7 @@ class MetadataSection(ParseSource):
             if valid_line:
                 properties = _parse_config_line(curr_line, self.__pobj)
                 for prop in properties:
+                    error_list = []
                     pname = prop[0].strip().lower()
                     pval_str = prop[1].strip()
                     if ((pname == 'type') and
@@ -885,7 +901,7 @@ class MetadataSection(ParseSource):
                         # Make sure this is a match
                         check_prop = Var.get_prop(pname)
                         if check_prop is not None:
-                            pval = check_prop.valid_value(pval_str)
+                            pval = check_prop.valid_value(pval_str, error_list=error_list)
                         else:
                             emsg = "variable property name"
                             self.__pobj.add_syntax_err(emsg, token=pname)
@@ -896,6 +912,13 @@ class MetadataSection(ParseSource):
                             errmsg = "'{}' property value"
                             self.__pobj.add_syntax_err(errmsg.format(pname),
                                                        token=pval_str)
+                            self.__section_valid = False
+                            var_ok = False
+                        # end if
+                        if error_list:
+                            for error in error_list:
+                                self.__pobj.add_syntax_err(error, token=pval_str)
+                            # end for
                             self.__section_valid = False
                             var_ok = False
                         # end if
@@ -935,6 +958,11 @@ class MetadataSection(ParseSource):
                 var_ok = False
                 self.__section_valid = False
             # end try
+            if newvar and newvar.error_list and len(newvar.error_list) > 0:
+                for error in newvar.error_list:
+                    self.__pobj.add_syntax_err(error)
+                # end for
+            # end if
         # No else, will return None for newvar
         # end if
         return newvar, curr_line
@@ -1092,7 +1120,7 @@ class MetadataSection(ParseSource):
                         errmsg += context_string(context)
                         if logger is not None:
                             errmsg = "ERROR: " + errmsg
-                            logger.error(errmsg.format(item, std, ctx))
+                            logger.error(errmsg)
                             dname = unique_standard_name()
                         else:
                             raise CCPPError(errmsg) from verr

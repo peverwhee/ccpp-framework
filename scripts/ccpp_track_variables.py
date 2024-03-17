@@ -121,7 +121,7 @@ def create_var_graph(suite, var, config, metapath, run_env):
 
             run_env.logger.debug(f"reading metadata file {scheme_filename} for scheme {scheme}")
 
-            new_metadata_headers = parse_metadata_file(scheme_filename,
+            new_metadata_headers, _ = parse_metadata_file(scheme_filename,
                                                        known_ddts=registered_fortran_ddt_names(),
                                                        run_env=run_env)
             for scheme_metadata in new_metadata_headers:

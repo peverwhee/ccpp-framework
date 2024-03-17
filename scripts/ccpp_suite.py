@@ -602,6 +602,7 @@ class API(VarDictionary):
         self.__module = 'ccpp_physics_api'
         self.__host = host_model
         self.__suites = list()
+        self.__error_string = ''
         super().__init__(self.module, run_env, parent_dict=self.host_model)
         # Create a usable library out of scheme_headers
         # Structure is dictionary of dictionaries
@@ -637,6 +638,8 @@ class API(VarDictionary):
                           self.__ddt_lib, run_env)
             self.__suites.append(suite)
         # end for
+        # Determine if we found any errors during parsing
+        self.__error_string = self.concatenate_errors()
         # We will need the correct names for errmsg and errcode
         evar = self.host_model.find_variable(standard_name='ccpp_error_message')
         subst_dict = {'intent':'out'}
@@ -695,6 +698,29 @@ class API(VarDictionary):
             api_filenames.append(out_file_name)
         # end for
         return api_filenames
+
+    def concatenate_errors(self):
+        """Return string with all errors found during parsing"""
+        errstr = ''
+        for suite in self.suites:
+           if len(suite.error_list) > 0:
+               errstr += suite.prepare_errors()
+           # end if
+           for group in suite.groups:
+              if len(group.error_list) > 0:
+                  errstr += group.prepare_errors()
+              # end if
+              for part in group.parts:
+                  for scheme in part.schemes():
+                      if len(scheme.error_list) > 0:
+                          errstr += scheme.prepare_errors()
+                      # end if
+                  # end for
+              # end for
+           # end for
+        # end for
+        return errstr
+
 
     @classmethod
     def declare_inspection_interfaces(cls, ofile):
@@ -1131,6 +1157,11 @@ class API(VarDictionary):
         self.write_req_vars_sub(ofile, errmsg_name, errcode_name)
         # Write out the suite scheme list subroutine
         self.write_suite_schemes_sub(ofile, errmsg_name, errcode_name)
+
+    @property
+    def error_string(self):
+        """Return the concatenated error string for the API"""
+        return self.__error_string
 
     @property
     def module(self):
