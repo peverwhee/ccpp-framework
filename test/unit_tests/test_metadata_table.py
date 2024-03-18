@@ -14,6 +14,7 @@
 import sys
 import os
 import unittest
+import traceback
 
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.abspath(os.path.join(TEST_DIR, os.pardir, os.pardir, "scripts"))
@@ -43,7 +44,7 @@ class MetadataTableTestCase(unittest.TestCase):
         known_ddts = list()
         filename = os.path.join(SAMPLE_FILES_DIR, "test_host.meta")
         #Exercise
-        result = parse_metadata_file(filename, known_ddts, self._DUMMY_RUN_ENV)
+        result, _ = parse_metadata_file(filename, known_ddts, self._DUMMY_RUN_ENV)
         #Verify that:
         #       no dependencies is returned as ''
         #       rel_path is returned as None
@@ -63,7 +64,7 @@ class MetadataTableTestCase(unittest.TestCase):
         known_ddts = list()
         filename = os.path.join(SAMPLE_FILES_DIR, "test_multi_ccpp_arg_tables.meta")
         #Exercise
-        result = parse_metadata_file(filename, known_ddts, self._DUMMY_RUN_ENV)
+        result, _ = parse_metadata_file(filename, known_ddts, self._DUMMY_RUN_ENV)
         #Verify that size of returned list equals number of ccpp-table-properties in the test file
         # ccpp-arg-tables are returned in result[0].sections() and result[1].sections()
         self.assertEqual(len(result), 2)
@@ -144,7 +145,7 @@ class MetadataTableTestCase(unittest.TestCase):
         with self.assertRaises(Exception) as context:
             _ = parse_metadata_file(filename, known_ddts, self._DUMMY_RUN_ENV)
 
-        #print("The exception is", context.exception)
+        print("The exception is", context.exception)
         emsg = "Required property, 'intent', missing, at "
         self.assertTrue(emsg in str(context.exception))
 
@@ -363,7 +364,7 @@ class MetadataTableTestCase(unittest.TestCase):
         filename = os.path.join(SAMPLE_FILES_DIR,
                                 "test_dependencies_rel_path.meta")
 
-        result = parse_metadata_file(filename, known_ddts,
+        result, _ = parse_metadata_file(filename, known_ddts,
                                      self._DUMMY_RUN_ENV)
 
         dependencies = result[0].dependencies

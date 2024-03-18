@@ -70,7 +70,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
         module_files = [os.path.join(self._sample_files_dir, "data1_mod.meta")]
         # Exercise
         hname = 'host_name_data1'
-        host_model = parse_host_model_files(module_files, hname, self._run_env)
+        host_model, errstr = parse_host_model_files(module_files, hname, self._run_env)
         # Verify the name of the host model
         self.assertEqual(host_model.name, hname)
         module_headers = host_model.metadata_tables()
@@ -93,7 +93,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
         module_files = [os.path.join(self._sample_files_dir, "ddt1.meta")]
         # Exercise
         hname = 'host_name_ddt1'
-        host_model = parse_host_model_files(module_files, hname, self._run_env)
+        host_model, errstr = parse_host_model_files(module_files, hname, self._run_env)
         # Verify the name of the host model
         self.assertEqual(host_model.name, hname)
         module_headers = host_model.metadata_tables()
@@ -125,7 +125,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
         module_files = [os.path.join(self._sample_files_dir, "ddt2.meta")]
         # Exercise
         hname = 'host_name_ddt2'
-        host_model = parse_host_model_files(module_files, hname, self._run_env)
+        host_model, errstr = parse_host_model_files(module_files, hname, self._run_env)
         # Verify the name of the host model
         self.assertEqual(host_model.name, hname)
         module_headers = host_model.metadata_tables()
@@ -163,7 +163,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
                                      "ddt_data1_mod.meta")]
         # Exercise
         hname = 'host_name_ddt_data'
-        host_model = parse_host_model_files(module_files, hname, self._run_env)
+        host_model, errstr = parse_host_model_files(module_files, hname, self._run_env)
         # Verify the name of the host model
         self.assertEqual(host_model.name, hname)
         module_headers = host_model.metadata_tables()
@@ -208,7 +208,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
         module_files = [os.path.join(self._sample_files_dir, "ddt1_plus.meta")]
         # Exercise
         hname = 'host_name_ddt1_plus'
-        host_model = parse_host_model_files(module_files, hname, self._run_env)
+        host_model, errstr = parse_host_model_files(module_files, hname, self._run_env)
         # Verify the name of the host model
         self.assertEqual(host_model.name, hname)
         module_headers = host_model.metadata_tables()
@@ -243,7 +243,7 @@ class MetadataHeaderTestCase(unittest.TestCase):
         # Exercise
         hname = 'host_name_ddt_extra_var'
         with self.assertRaises(CCPPError) as context:
-            host_model = parse_host_model_files(module_files, hname,
+            host_model, errstr = parse_host_model_files(module_files, hname,
                                                 self._run_env)
         # end with
         # Check error messages

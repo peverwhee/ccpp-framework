@@ -36,7 +36,7 @@ def test_MetadataTable_parse_table(tmpdir):
                                                   'suites':''})
 
 
-    metadata_headers = parse_metadata_file(path, known_ddts=registered_fortran_ddt_names(),
+    metadata_headers, _ = parse_metadata_file(path, known_ddts=registered_fortran_ddt_names(),
                                                                      run_env=dummy_run_env)
 
     # check metadata header

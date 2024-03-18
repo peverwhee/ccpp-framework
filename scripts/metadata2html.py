@@ -99,7 +99,7 @@ def convert_to_html(filename_in, outdir, logger, run_env):
     if not os.path.isfile(filename_in):
         raise Exception("Metadata file {} not found".format(filename_in))
     logger.info("Converting file {} to HTML".format(filename_in))
-    metadata_headers = parse_metadata_file(filename_in,
+    metadata_headers, _ = parse_metadata_file(filename_in,
                                            known_ddts=registered_fortran_ddt_names(),
                                            run_env=run_env)
     for metadata_header in metadata_headers:

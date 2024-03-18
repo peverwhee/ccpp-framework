@@ -150,9 +150,9 @@ class Var:
     >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'ino'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid intent variable property, 'ino', at <standard input>:1
-    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in', 'optional' : 'false'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +IGNORE_EXCEPTION_DETAIL
-    Traceback (most recent call last):
-    ParseSyntaxError: Invalid variable property name, 'optional', at <standard input>:1
+    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in', 'optional' : 'false'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +ELLIPSIS
+    <metavar.Var hi_mom: foo at 0x...>
+
     # Check that two variables that differ in their units - m vs km - are compatible
     >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm',     \
              'dimensions' : '()', 'type' : 'real', 'intent' : 'in'},              \
@@ -206,6 +206,8 @@ class Var:
                     VariableProperty('polymorphic', bool, optional_in=True,
                                      default_in=False),
                     VariableProperty('top_at_one', bool, optional_in=True,
+                                     default_in=False),
+                    VariableProperty('optional', bool, optional_in=True,
                                      default_in=False),
                     VariableProperty('target', bool, optional_in=True,
                                      default_in=False)]
@@ -273,6 +275,7 @@ class Var:
         self.__children = list() # This Var's array references
         self.__clone_source = clone_source
         self.__run_env = run_env
+        self.__error_list = []
         if isinstance(prop_dict, Var):
             prop_dict = prop_dict.copy_prop_dict()
         # end if
@@ -360,8 +363,7 @@ class Var:
         try:
             for prop_name, prop_val in self.var_properties():
                 prop = Var.get_prop(prop_name)
-                _ = prop.valid_value(prop_val,
-                                     prop_dict=self._prop_dict, error=True)
+                _ = prop.valid_value(prop_val, prop_dict=self._prop_dict, error=True)
             # end for
         except CCPPError as cperr:
             lname = self._prop_dict['local_name']
@@ -370,7 +372,7 @@ class Var:
                                    context=self.context) from cperr
         # end try
 
-    def compatible(self, other, run_env):
+    def compatible(self, other, run_env, error=True):
         """Return a VarCompatObj object which describes the equivalence,
         compatibility, or incompatibility between <self> and <other>.
         """
@@ -392,7 +394,7 @@ class Var:
         odims = other.get_dimensions()
         compat = VarCompatObj(sstd_name, stype, skind, sunits, sdims, sloc_name, stopp,
                               ostd_name, otype, okind, ounits, odims, oloc_name, otopp,
-                              run_env,
+                              run_env, error=error,
                               v1_context=self.context, v2_context=other.context)
         if (not compat) and (run_env.logger is not None):
             incompat_str = compat.incompat_reason
@@ -846,6 +848,11 @@ class Var:
         return Var.__constituent_prop_dict.keys()
 
     @property
+    def error_list(self):
+        """Return this variable's error list"""
+        return self.__error_list
+
+    @property
     def parent(self):
         """Return this variable's parent variable (or None)"""
         return self.__parent_var
@@ -1025,7 +1032,7 @@ class Var:
                     vars_needed.append(dvar)
         return (conditional, vars_needed)
 
-    def write_def(self, outfile, indent, wdict, allocatable=False,
+    def write_def(self, outfile, indent, wdict, allocatable=False, target=False,
                   dummy=False, add_intent=None, extra_space=0, public=False):
         """Write the definition line for the variable to <outfile>.
         If <dummy> is True, include the variable's intent.
@@ -1077,11 +1084,15 @@ class Var:
                 raise CCPPError(errmsg)
             # end if
         # end if
+        optional = self.get_prop_value('optional')
         if protected and dummy:
             intent_str = 'intent(in)   '
         elif allocatable:
             if dimstr or polymorphic:
-                intent_str = 'allocatable  '
+                intent_str = 'allocatable         '
+                if target:
+                    intent_str = 'allocatable,'
+                    intent_str += '  target'
             else:
                 intent_str = ' '*13
             # end if
@@ -1089,11 +1100,14 @@ class Var:
             alloval = self.get_prop_value('allocatable')
             if (intent.lower()[-3:] == 'out') and alloval:
                 intent_str = f"allocatable, intent({intent})"
+            elif optional:
+                intent_str = f"intent({intent}),{' '*(5 - len(intent))}"
+                intent_str += 'target, optional '
             else:
                 intent_str = f"intent({intent}){' '*(5 - len(intent))}"
             # end if
         elif not dummy:
-            intent_str = ''
+            intent_str = ' '*20
         else:
             intent_str = ' '*13
         # end if
@@ -1111,25 +1125,39 @@ class Var:
         extra_space -= len(targ)
         if self.is_ddt():
             if polymorphic:
-                dstr = "class({kind}){cspc}{intent} :: {name}{dims} ! {sname}"
-                cspc = comma + ' '*(extra_space + 12 - len(kind))
+                dstr = "class({kind}){cspace}{intent} :: {name}{dims}"
+                cspace = comma + ' '*(extra_space + 12 - len(kind))
             else:
-                dstr = "type({kind}){cspc}{intent} :: {name}{dims} ! {sname}"
-                cspc = comma + ' '*(extra_space + 13 - len(kind))
+                dstr = "type({kind}){cspace}{intent} :: {name}{dims}"
+                cspace = comma + ' '*(extra_space + 13 - len(kind))
             # end if
         else:
             if kind:
-                dstr = "{type}({kind}){cspc}{intent} :: {name}{dims} ! {sname}"
-                cspc = comma + ' '*(extra_space + 17 - len(vtype) - len(kind))
+                dstr = "{type}({kind}){cspace}{intent} :: {name}{dims}"
+                cspace = comma + ' '*(extra_space + 17 - len(vtype) - len(kind))
             else:
-                dstr = "{type}{cspc}{intent} :: {name}{dims} ! {sname}"
-                cspc = comma + ' '*(extra_space + 19 - len(vtype))
+                dstr = "{type}{cspace}{intent} :: {name}{dims}"
+                cspace = comma + ' '*(extra_space + 19 - len(vtype))
             # end if
         # end if
-
         outfile.write(dstr.format(type=vtype, kind=kind, intent=intent_str,
-                                  name=name, dims=dimstr, cspc=cspc,
+                                  name=name, dims=dimstr, cspace=cspace,
                                   sname=stdname), indent)
+
+    def write_ptr_def(self, outfile, indent, name, kind, dimstr, vtype, extra_space=0):
+        """Write the definition line for local null pointer declaration to <outfile>."""
+        comma = ', '
+        if kind:
+            dstr = "{type}({kind}){cspace}pointer          :: {name}{dims}{cspace2} => null()"
+            cspace = comma + ' '*(extra_space + 20 - len(vtype) - len(kind))
+            cspace2 = ' '*(20 -len(name) - len(dimstr))
+        else:
+            dstr = "{type}{cspace}pointer          :: {name}{dims}{cspace2} => null()"
+            cspace = comma + ' '*(extra_space + 22 - len(vtype))
+            cspace2 = ' '*(20 -len(name) - len(dimstr))
+        # end if
+        outfile.write(dstr.format(type=vtype, kind=kind, name=name, dims=dimstr,
+                                  cspace=cspace, cspace2=cspace2), indent)
 
     def is_ddt(self):
         """Return True iff <self> is a DDT type."""
@@ -1505,6 +1533,7 @@ class VarDictionary(OrderedDict):
         self.__name = name
         self.__run_env = run_env
         self.__parent_dict = parent_dict
+        self.__error_list = []
         if parent_dict is not None:
             parent_dict.add_sub_scope(self)
         # end if
@@ -1541,6 +1570,11 @@ class VarDictionary(OrderedDict):
         """Return the parent dictionary of this dictionary"""
         return self.__parent_dict
 
+    @property
+    def error_list(self):
+        """Return the list of errors for this dictionary"""
+        return self.__error_list
+
     @staticmethod
     def include_var_in_list(var, std_vars, loop_vars, consts):
         """Return True iff <var> is of a type allowed by the logicals,
@@ -1557,6 +1591,19 @@ class VarDictionary(OrderedDict):
             include_var = std_vars and std_var
         # end if
         return include_var
+
+    def add_error(self, errstr):
+        """Add error to error_list"""
+        self.__error_list.append(errstr)
+
+    def prepare_errors(self):
+        """Prepare error string for this error_list"""
+        if len(self.error_list) > 1:
+            errstr = f'\n  {len(self.error_list)} errors found when analyzing {self.name}:\n    '
+        else:
+            errstr = f'\n  {len(self.error_list)} error found when analyzing {self.name}:\n    '
+        errstr += '\n    '.join(self.error_list)
+        return errstr
 
     def variable_list(self, recursive=False,
                       std_vars=True, loop_vars=True, consts=True):
@@ -1602,8 +1649,9 @@ class VarDictionary(OrderedDict):
                                    token=standard_name, context=newvar.context)
         # end if
         if cvar is not None:
-            compat = cvar.compatible(newvar, run_env)
-            if compat:
+            compat = cvar.compatible(newvar, run_env, error=False)
+            errstr = compat.errstr
+            if compat and not errstr:
                 # Check for intent mismatch
                 vintent = cvar.get_prop_value('intent')
                 dintent = newvar.get_prop_value('intent')
@@ -1628,7 +1676,7 @@ class VarDictionary(OrderedDict):
                                                     nlname, dintent, nctx))
                     # end if
                 # end if
-            else:
+            elif not errstr:
                 if self.__run_env.logger is not None:
                     emsg = "Attempt to add incompatible variable, {} from {}"
                     emsg += "\n{}".format(compat.incompat_reason)
