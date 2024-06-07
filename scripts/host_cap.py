@@ -184,13 +184,6 @@ def constituent_model_object_name(host_model):
     return hvar.get_prop_value('local_name')
 
 ###############################################################################
-def dynamic_constituent_array_name(host_model):
-###############################################################################
-    """Return the name of the allocatable dynamic constituent properites array"""
-    hstr = f"{host_model.name}_dynamic_constituents"
-    return unique_local_name(hstr, host_model)
-
-###############################################################################
 def constituent_model_const_stdnames(host_model):
 ###############################################################################
     """Return the name of the array of constituent standard names"""
@@ -267,7 +260,7 @@ def constituent_model_const_index(host_model):
     return unique_local_name(hstr, host_model)
 
 ###############################################################################
-def add_constituent_vars(cap, host_model, suite_list, run_env):
+def add_constituent_vars(cap, host_model, suite_list, dyn_const_dict, run_env):
 ###############################################################################
     """Create a DDT library containing array reference variables
     for each constituent field for all suites in <suite_list>.
@@ -378,9 +371,11 @@ def add_constituent_vars(cap, host_model, suite_list, run_env):
     # end if
     ddt_lib.collect_ddt_fields(const_dict, const_var, run_env,
                                skip_duplicates=True)
-    # Declare the allocatable dynamic constituents array
-    dyn_const_name = dynamic_constituent_array_name(host_model)
-    cap.write(f"type({CONST_PROP_TYPE}), allocatable, target :: {dyn_const_name}(:)", 1)
+    # Declare the allocatable dynamic constituents arrays
+    for idx, scheme in enumerate(sorted(dyn_const_dict)):
+        cap.comment(f"dynamic constituent props variable for {scheme}", 2)
+        cap.write(f"type({CONST_PROP_TYPE}), allocatable, target :: dyn_const_prop_{idx}(:)", 2)
+    # end for
     # Declare variable for the constituent standard names array
     max_csname = max([len(x) for x in const_stdnames]) if const_stdnames else 0
     num_const_fields = len(const_stdnames)
@@ -541,7 +536,8 @@ def write_host_cap(host_model, api, module_name, output_dir, run_env):
         cap.write(f"public :: {const_index_func}", 1)
         cap.write("", 0)
         cap.write("! Private module variables", 1)
-        const_dict = add_constituent_vars(cap, host_model, api.suites, run_env)
+        const_dict = add_constituent_vars(cap, host_model, api.suites,
+                                          api.dyn_const_dict, run_env)
         cap.end_module_header()
         for stage in CCPP_STATE_MACH.transitions():
             # Create a dict of local variables for stage
@@ -661,6 +657,7 @@ def write_host_cap(host_model, api, module_name, output_dir, run_env):
             emsg = "write({errmsg}, '(3a)')".format(errmsg=errmsg_name)
             emsg += '"No suite named ", '
             emsg += 'trim(suite_name), "found"'
+
             cap.write(emsg, 3)
             cap.write("{errflg} = 1".format(errflg=errflg_name), 3)
             cap.write("end if", 2)
@@ -675,13 +672,11 @@ def write_host_cap(host_model, api, module_name, output_dir, run_env):
         cap.write("", 0)
         const_names_name = constituent_model_const_stdnames(host_model)
         const_indices_name = constituent_model_const_indices(host_model)
-        dyn_const_name = dynamic_constituent_array_name(host_model)
         ConstituentVarDict.write_host_routines(cap, host_model, reg_name, init_name,
                                                numconsts_name, queryconsts_name,
                                                copyin_name, copyout_name,
                                                cleanup_name,
                                                const_obj_name,
-                                               dyn_const_name,
                                                const_names_name,
                                                const_indices_name,
                                                const_array_func,
