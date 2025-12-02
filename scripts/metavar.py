@@ -1929,14 +1929,7 @@ class VarDictionary(OrderedDict):
                                         loop_vars=loop_vars, consts=consts):
                 if use_parents and host_dict:
                     hvar = host_dict.find_variable(standard_name)
-                    if hvar:
-                        lname = hvar.get_prop_value('local_name')
-                        parent = lname.split('%', 1)[0]
-                        if parent not in ddt_list:
-                            ddt_list.append(parent)
-                            parent_var = host_dict.find_variable(
-                            self[
-
+                # end if
                 self[standard_name].write_def(outfile, indent, self,
                                               dummy=dummy)
             # end if
