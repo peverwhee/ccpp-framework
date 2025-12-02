@@ -666,7 +666,7 @@ class Var:
         # end if
         return dimstr
 
-    def call_string(self, var_dict, loop_vars=None):
+    def call_string(self, var_dict, loop_vars=None, use_parents=False):
         """Construct the actual argument string for this Var by translating
         standard names to local names.
         String includes array bounds unless loop_vars is None.
@@ -1918,13 +1918,25 @@ class VarDictionary(OrderedDict):
         return plist
 
     def declare_variables(self, outfile, indent, dummy=False,
-                          std_vars=True, loop_vars=True, consts=True):
+                          std_vars=True, loop_vars=True, consts=True,
+                          use_parents=False, host_dict=None):
         """Write out the declarations for this dictionary's variables"""
+        ddt_list = []
         for standard_name in self.keys():
             var = self.find_variable(standard_name=standard_name,
                                      any_scope=False)
             if self.include_var_in_list(var, std_vars=std_vars,
                                         loop_vars=loop_vars, consts=consts):
+                if use_parents and host_dict:
+                    hvar = host_dict.find_variable(standard_name)
+                    if hvar:
+                        lname = hvar.get_prop_value('local_name')
+                        parent = lname.split('%', 1)[0]
+                        if parent not in ddt_list:
+                            ddt_list.append(parent)
+                            parent_var = host_dict.find_variable(
+                            self[
+
                 self[standard_name].write_def(outfile, indent, self,
                                               dummy=dummy)
             # end if
@@ -2090,13 +2102,13 @@ class VarDictionary(OrderedDict):
         # end if
         return my_var
 
-    def var_call_string(self, var, loop_vars=None):
+    def var_call_string(self, var, loop_vars=None, use_parents=False):
         """Construct the actual argument string for <var> by translating
         standard names to local names. String includes array bounds.
         if <loop_vars> is present, look there first for array bounds,
         even if usage requires a loop substitution.
         """
-        return var.call_string(self, loop_vars=loop_vars)
+        return var.call_string(self, loop_vars=loop_vars, use_parents=use_parents)
 
     def new_internal_variable_name(self, prefix=None, max_len=63):
         """Find a new local variable name for this dictionary.

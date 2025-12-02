@@ -105,7 +105,7 @@ class CallList(VarDictionary):
         super().add_variable(newvar, run_env, exists_ok=exists_ok,
                              gen_unique=gen_unique, adjust_intent=adjust_intent)
 
-    def call_string(self, cldicts=None, host_dict=None, is_func_call=False, subname=None, sub_lname_list=None):
+    def call_string(self, cldicts=None, host_dict=None, is_func_call=False, subname=None, sub_lname_list=None, use_parents=False):
         """Return a dummy argument string for this call list.
         <cldict> may be a list of VarDictionary objects to search for
         local_names (default is to use self).
@@ -116,6 +116,7 @@ class CallList(VarDictionary):
         """
         arg_str = ""
         arg_sep = ""
+        parent_ddt_list = []
         for var in self.variable_list():
             # Do not include constants
             stdname = var.get_prop_value('standard_name')
@@ -189,11 +190,26 @@ class CallList(VarDictionary):
                     if hvar:
                         lname = host_dict.var_call_string(hvar)
                     # end if
+                    if use_parents:
+                        parent = lname.split('%', 1)[0]
+                        if parent != lname and parent not in parent_ddt_list:
+                            arg_str += f"{arg_sep}{parent}"
+                            parent_ddt_list.append(parent)
+                        elif parent == lname:
+                            arg_str += f"{arg_sep}{lname}"
+                        # end if
+                    else:
+                        if is_func_call:
+                            arg_str += "{}{}={}".format(arg_sep, dummy, lname)
+                        else:
+                            arg_str += "{}{}".format(arg_sep, lname)
+                        # end if
+                    # end if
                 # end if
-                if is_func_call:
-                    arg_str += "{}{}={}".format(arg_sep, dummy, lname)
-                else:
-                    arg_str += "{}{}".format(arg_sep, lname)
+#                if is_func_call:
+#                    arg_str += "{}{}={}".format(arg_sep, dummy, lname)
+#                else:
+#                    arg_str += "{}{}".format(arg_sep, lname)
                 # end if
                 arg_sep = ", "
             # end if
@@ -2542,7 +2558,7 @@ class Group(SuiteObject):
         # end for
         # First, write out the subroutine header
         subname = self.name
-        call_list = self.call_list.call_string()
+        call_list = self.call_list.call_string(host_dict=host_model, use_parents=True)
         outfile.write(Group.__subhead.format(subname=subname, args=call_list),
                       indent)
         # Write out any use statements
@@ -2575,7 +2591,7 @@ class Group(SuiteObject):
             self.run_env.logger.isEnabledFor(logging.DEBUG)):
             self.run_env.logger.debug(msg.format(self.name, call_vars))
         # end if
-        self.call_list.declare_variables(outfile, indent+1, dummy=True)
+        self.call_list.declare_variables(outfile, indent+1, dummy=True, use_parents=True)
         # DECLARE local variables
         if subpart_allocate_vars or subpart_scalar_vars or subpart_optional_vars:
             outfile.write('\n! Local Variables', indent+1)
