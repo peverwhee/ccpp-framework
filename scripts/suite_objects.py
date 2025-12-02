@@ -105,7 +105,7 @@ class CallList(VarDictionary):
         super().add_variable(newvar, run_env, exists_ok=exists_ok,
                              gen_unique=gen_unique, adjust_intent=adjust_intent)
 
-    def call_string(self, cldicts=None, is_func_call=False, subname=None, sub_lname_list=None):
+    def call_string(self, cldicts=None, host_dict=None, is_func_call=False, subname=None, sub_lname_list=None):
         """Return a dummy argument string for this call list.
         <cldict> may be a list of VarDictionary objects to search for
         local_names (default is to use self).
@@ -181,6 +181,13 @@ class CallList(VarDictionary):
                                                loop_subst=run_phase)
                     if _BLANK_DIMS_RE.match(vdims) is None:
                         lname = lname + vdims
+                    # end if
+                # end if
+                # Use the DDT name if found on host side
+                if host_dict:
+                    hvar = host_dict.find_variable(var.get_prop_value('standard_name'))
+                    if hvar:
+                        lname = host_dict.var_call_string(hvar)
                     # end if
                 # end if
                 if is_func_call:
@@ -1802,7 +1809,7 @@ class Scheme(SuiteObject):
         # end if
         outfile.write(stmt, indent)
 
-    def write(self, outfile, errcode, errmsg, indent):
+    def write(self, outfile, host_model, errcode, errmsg, indent):
         # Unused arguments are for consistent write interface
         # pylint: disable=unused-argument
         """Write code to call this Scheme to <outfile>"""
@@ -1811,6 +1818,7 @@ class Scheme(SuiteObject):
         cldicts = [self.__group, self.__group.call_list]
         cldicts.extend(self.__group.suite_dicts())
         my_args = self.call_list.call_string(cldicts=cldicts,
+                                             host_dict=host_model,
                                              is_func_call=True,
                                              subname=self.subroutine_name,
                                              sub_lname_list = self.__reverse_transforms)
@@ -2019,13 +2027,13 @@ class VerticalLoop(SuiteObject):
         # end for
         return scheme_mods
 
-    def write(self, outfile, errcode, errmsg, indent):
+    def write(self, outfile, host_model, errcode, errmsg, indent):
         """Write code for the vertical loop, including contents, to <outfile>"""
         outfile.write('do {} = 1, {}'.format(self.name, self.dimension_name),
                       indent)
         # Note that 'scheme' may be a sybcycle or other construct
         for item in self.parts:
-            item.write(outfile, errcode, errmsg, indent+1)
+            item.write(outfile, host_model,  errcode, errmsg, indent+1)
         # end for
         outfile.write('end do', 2)
 
@@ -2091,12 +2099,12 @@ class Subcycle(SuiteObject):
         # end for
         return scheme_mods
 
-    def write(self, outfile, errcode, errmsg, indent):
+    def write(self, outfile, host_model, errcode, errmsg, indent):
         """Write code for the subcycle loop, including contents, to <outfile>"""
         outfile.write('do {} = 1, {}'.format(self.name, self._loop), indent)
         # Note that 'scheme' may be a sybcycle or other construct
         for item in self.parts:
-            item.write(outfile, errcode, errmsg, indent+1)
+            item.write(outfile, host_model, errcode, errmsg, indent+1)
         # end for
         outfile.write('end do', 2)
 
@@ -2135,11 +2143,11 @@ class TimeSplit(SuiteObject):
         # end for
         return scheme_mods
 
-    def write(self, outfile, errcode, errmsg, indent):
+    def write(self, outfile, host_model, errcode, errmsg, indent):
         """Write code for this TimeSplit section, including contents,
         to <outfile>"""
         for item in self.parts:
-            item.write(outfile, errcode, errmsg, indent)
+            item.write(outfile, host_model, errcode, errmsg, indent)
         # end for
 
 ###############################################################################
@@ -2164,7 +2172,7 @@ class ProcessSplit(SuiteObject):
         # Handle all the suite objects inside of this group
         raise CCPPError('ProcessSplit not yet implemented')
 
-    def write(self, outfile, errcode, errmsg, indent):
+    def write(self, outfile, host_model, errcode, errmsg, indent):
         """Write code for this ProcessSplit section, including contents,
         to <outfile>"""
         raise CCPPError('ProcessSplit not yet implemented')
@@ -2427,7 +2435,7 @@ class Group(SuiteObject):
         # end if
         return fvar
 
-    def write(self, outfile, host_arglist, indent, const_mod,
+    def write(self, outfile, host_model, host_arglist, indent, const_mod,
               suite_vars=None, allocate=False, deallocate=False):
         """Write code for this subroutine (Group), including contents,
         to <outfile>"""
@@ -2680,7 +2688,7 @@ class Group(SuiteObject):
         # end if
         # Write the scheme and subcycle calls
         for item in self.parts:
-            item.write(outfile, errcode, errmsg, indent + 1)
+            item.write(outfile, host_model, errcode, errmsg, indent + 1)
         # end for
         # Deallocate local arrays
         if allocatable_var_set:

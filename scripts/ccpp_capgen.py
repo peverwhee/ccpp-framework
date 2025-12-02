@@ -698,7 +698,7 @@ def capgen(run_env, return_db=False):
         os.makedirs(outtemp_dir)
     # end if
     ccpp_api = API(sdfs, host_model, scheme_headers, run_env)
-    cap_filenames = ccpp_api.write(outtemp_dir, run_env)
+    cap_filenames = ccpp_api.write(outtemp_dir, host_model, run_env)
     if run_env.generate_host_cap:
         # Create a cap file
         cap_module = host_model.ccpp_cap_name()
