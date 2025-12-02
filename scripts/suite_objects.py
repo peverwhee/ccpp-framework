@@ -195,7 +195,7 @@ class CallList(VarDictionary):
                         if parent != lname and parent not in parent_ddt_list:
                             arg_str += f"{arg_sep}{parent}"
                             parent_ddt_list.append(parent)
-                        elif parent == lname:
+                        elif parent == lname and parent not in parent_ddt_list:
                             arg_str += f"{arg_sep}{lname}"
                         # end if
                     else:
