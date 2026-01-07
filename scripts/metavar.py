@@ -1957,6 +1957,13 @@ class VarDictionary(OrderedDict):
                                 self.write_ddt_def(outfile, indent, hvar)
                                 host_var_list.append(hsname)
                             # end if
+                            _, additional_vars = hvar.call_string(host_dict, use_parents=False)
+                            for additional_var in additional_vars:
+                                try:
+                                    additional_var.write_def(outfile, indent, self, dummy=dummy, add_intent='in')
+                                except:
+                                    print('failed!')
+                            # end for
                         # Write Host Var declaration statement.
                         except:
                             hsname = hvar.get_prop_value('standard_name')
