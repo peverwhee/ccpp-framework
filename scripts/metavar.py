@@ -676,8 +676,10 @@ class Var:
         if <loop_vars> is not None, look there first for array bounds,
         even if usage requires a loop substitution.
         """
+        additional_vars = []
         if loop_vars is None:
             call_str = self.get_prop_value('local_name')
+            full_lname = call_str
             # Look for dims in case this is an array selection variable
             dind = call_str.find('(')
             if dind > 0:
@@ -714,8 +716,11 @@ class Var:
                                     iname = None
                                 # end try
                             else:
-                                iname = dvar.call_string(var_dict,
+                                iname, _ = dvar.call_string(var_dict,
                                                          loop_vars=loop_vars)
+                                if not dvar.get_prop_value('local_name').isdigit():
+                                    additional_vars.append(dvar)
+                                # end if
                             # end if
                         else:
                             iname = ''
@@ -742,7 +747,7 @@ class Var:
             # end for
             call_str += ')'
         # end if
-        return call_str
+        return call_str, additional_vars
 
     def valid_value(self, prop_name, test_value=None, error=False):
         """Return a valid version of <test_value> if it is a valid value
@@ -1961,6 +1966,8 @@ class VarDictionary(OrderedDict):
                                 host_var_list.append(hsname)
                             # end if
                         # end try
+                    else:
+                        self[standard_name].write_def(outfile, indent, self, dummy=dummy)
                     # end if
                 else:
                     # DJS: This routine is only called when writing the Groups, which NOW always
@@ -2058,7 +2065,8 @@ class VarDictionary(OrderedDict):
             for ssubst in std_subst:
                 svar = self.find_variable(standard_name=ssubst, any_scope=False)
                 if svar is not None:
-                    lnames.append(svar.call_string(self))
+                    call_string, _ = svar.call_string(self)
+                    lnames.append(call_string)
                 else:
                     break
                 # end if
@@ -2188,7 +2196,8 @@ def write_ptr_def(outfile, name, pointer_type, host_dict, indent):
     dims  = '1'
     var_thrd = host_dict.find_variable(standard_name='ccpp_thread_count',any_scope=True)
     if var_thrd:
-        dims = "1:" + host_dict.var_call_string(var_thrd)
+        call_string = host_dict.var_call_string(var_thrd)
+        dims = "1:" + call_string
     # end if
 
     # Write local pointer variable definition.

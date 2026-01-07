@@ -166,8 +166,9 @@ class HostModel(VarDictionary):
 
     def argument_list(self, loop_vars=True):
         """Return a string representing the host model variable arg list"""
-        args = [v.call_string(self)
-                for v in self.variable_list(loop_vars=loop_vars, consts=False)]
+        args = [a for a, b in
+                (v.call_string(self)
+                for v in self.variable_list(loop_vars=loop_vars, consts=False))]
         return ', '.join(args)
 
     def metadata_tables(self):

@@ -785,8 +785,8 @@ class API(VarDictionary):
             errmsg_name = self._errmsg_var.get_prop_value('local_name')
             errcode_name = self._errcode_var.get_prop_value('local_name')
         else:
-            errmsg_name = self._errmsg_var.call_string(self)
-            errcode_name = self._errcode_var.call_string(self)
+            errmsg_name, _ = self._errmsg_var.call_string(self)
+            errcode_name, _ = self._errcode_var.call_string(self)
         # end if
         return (errmsg_name, errcode_name)
 

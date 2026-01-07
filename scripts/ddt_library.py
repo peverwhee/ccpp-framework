@@ -105,11 +105,13 @@ class VarDDT(Var):
         """Return a legal call string of this VarDDT's local name sequence.
         """
         # XXgoldyXX: Need to add dimensions to this
+        additional_vars = []
         call_str = super().get_prop_value('local_name')
         if (not use_parents):
             if self.field is not None:
-                call_str += '%' + self.field.call_string(var_dict,
-                                                         loop_vars=loop_vars)
+                call_string_var, additional_vars = self.field.call_string(var_dict,
+                                                            loop_vars=loop_vars)
+                call_str += '%' + call_string_var
             # end if
         # end if
         # Parse call string and look for any reference to standard_name in local_name.
@@ -126,11 +128,12 @@ class VarDDT(Var):
                 if (hvar_sub):
                     call_strA = call_str[0:dimdA+1]
                     call_strB = call_str[dimdB::]
-                    call_str  = call_strA + var_dict.var_call_string(hvar_sub, loop_vars=loop_vars) + call_strB
+                    subpart, _ = var_dict.var_call_string(hvar_sub, loop_vars=loop_vars)
+                    call_str  = call_strA + subpart + call_strB
                 # end if
             # end if
         # end if
-        return call_str
+        return call_str, additional_vars
 
     def write_def(self, outfile, indent, ddict, allocatable=False, target=False,
                   dummy=False, add_intent=None, extra_space=0, public=False):

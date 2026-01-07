@@ -106,6 +106,142 @@ class CallList(VarDictionary):
         super().add_variable(newvar, run_env, exists_ok=exists_ok,
                              gen_unique=gen_unique, adjust_intent=adjust_intent)
 
+
+    def call_string_variable(self, var, host_var_list, arg_str, arg_sep, cldicts=None, host_dict=None, is_func_call=False, subname=None, sub_lname_list=None, use_parents=False):
+        # Do not include constants
+        stdname = var.get_prop_value('standard_name')
+        if stdname not in CCPP_CONSTANT_VARS:
+            # Find the dummy argument name
+            dummy = var.get_prop_value('local_name')
+            # Now, find the local variable name
+            if cldicts is not None:
+                for cldict in cldicts:
+                   dvar = cldict.find_variable(standard_name=stdname,
+                                                any_scope=False)
+                   if dvar is not None:
+                        break
+                    # end if
+                # end for
+                if dvar is None:
+                    if subname is not None:
+                        errmsg = "{}: ".format(subname)
+                    else:
+                        errmsg = ""
+                    # end if
+                    errmsg += "'{}', not found in call list for '{}'"
+                    clnames = [x.name for x in cldicts]
+                    raise CCPPError(errmsg.format(stdname, clnames))
+                # end if
+                lname = dvar.get_prop_value('local_name')
+            else:
+                dvar = self.find_variable(standard_name=stdname,
+                                                any_scope=False)
+                cldict = None
+                aref = var.array_ref(local_name=dummy)
+                if aref is not None:
+                    lname = aref.group(1)
+                else:
+                    lname = dummy
+                # end if
+            # end if
+            # Modify Scheme call_list to handle local_name change for this var.
+            # Are there any variable transforms for this scheme?
+            # If so, change Var's local_name need to local dummy array containing
+            # transformed argument, var_trans_local.
+            if sub_lname_list:
+                for (var_trans_local, var_lname, sname, rindices, lindices, compat_obj) in sub_lname_list:
+                    if (sname == stdname):
+                        lname = var_trans_local
+                    # end if
+                # end for
+            # end if
+            if is_func_call:
+                if cldicts is not None:
+                    use_dicts = cldicts
+                else:
+                    use_dicts = [self]
+                    dvar = self.find_variable(standard_name=stdname)
+                # end if
+                run_phase = self.routine.run_phase()
+                # We only need dimensions for suite variables in run phase
+                need_dims = SuiteObject.is_suite_variable(dvar) and run_phase
+                vdims = var.call_dimstring(var_dicts=use_dicts,
+                                           explicit_dims=need_dims,
+                                           loop_subst=run_phase)
+                if _BLANK_DIMS_RE.match(vdims) is None:
+                    lname = lname + vdims
+                # end if
+            # end if
+            # Using <host_dict>, construct Group and Scheme call_lists.
+            # When constructing Scheme call_lists*, use full variable name (e.g. parentDDT1%var1).
+            #  *Note* Additional handling for optional variables described below.
+            # When constructing Group call_lists, only pass in the parent DDT(s), and/or host
+            # flat fields (e.g. constants). These are stored in <host_var_list>
+            parent_stdname = ''
+            if host_dict:
+                hvar = host_dict.find_variable(var.get_prop_value('standard_name'))
+                if hvar is not None:
+                    if hvar.is_ddt():
+                        lname, _ = host_dict.var_call_string(hvar)
+                        parent_stdname = hvar.get_parent_prop('standard_name')
+                    else:
+                        if dvar:
+                            lname = dvar.get_prop_value('local_name')
+                        else:
+                            lname = var.get_prop_value('local_name')
+                        # end if
+                    # end if
+                # end if
+                #### Creating Group call_list ####
+                if use_parents:
+                    # Strip eldest <parent> DDT name, add to call_list, store in <host_var_list>.
+                    parent = lname.split('%', 1)[0]
+                    if parent != lname and (not parent_stdname or parent_stdname not in host_var_list):
+                        arg_str += f"{arg_sep}{parent}"
+                        host_var_list.append(parent_stdname)
+                    elif parent == lname and (not parent_stdname or parent_stdname not in host_var_list):
+                        lname = var.get_prop_value('local_name')
+                        arg_str += f"{arg_sep}{lname}"
+                    # end if
+                    # Even if we're using the parent DDT, we still need to pass in any indices
+                    if hvar is not None:
+                        _, additional_vars = host_dict.var_call_string(hvar)
+                        if additional_vars:
+                            for additional_var in additional_vars:
+                                arg_str, arg_sep, host_var_list = self.call_string_variable(additional_var, host_var_list, arg_str, arg_sep, cldicts=cldicts, host_dict=host_dict, is_func_call=is_func_call, subname=subname, sub_lname_list=sub_lname_list, use_parents=use_parents)
+                            # end for
+                        # end if
+                    # end if
+                #### Creating Scheme call_list ####
+                else:
+                    # Optional arguments in the Scheme call_lists are associated with
+                    # local pointers <lname_ptr>.
+                    hvar = host_dict.find_variable(standard_name=var.get_prop_value('standard_name'),any_scope=True)
+                    # Skip creating pointer if Host always provides field (e.g. active='.true.').
+                    if hvar:
+                        if var.get_prop_value('optional') and (hvar.get_prop_value('active') != '.true.'):
+                            # If threading variables provided by the Host, insert <var_thrd> to call string.
+                            var_thrd = host_dict.find_variable(standard_name='ccpp_thread_number',any_scope=True)
+                            if var_thrd:
+                                call_string, _ = host_dict.var_call_string(var_thrd)
+                                lname = dvar.get_prop_value('local_name')+'_ptr'+'('+call_string+')'+'%p'
+                            # Otherwise, NO threading variables provided by the Host (e.g. thread_num=thread_count=1)
+                            else:
+                                lname = dvar.get_prop_value('local_name')+'_ptr(1)%p'
+                            # end if
+                        # end if
+                    # end if
+                    if is_func_call:
+                        arg_str += "{}{}={}".format(arg_sep, dummy, lname)
+                    else:
+                        arg_str += "{}{}".format(arg_sep, lname)
+                    # end if
+                # end if
+            # end if
+            arg_sep = ", "
+        # end if
+        return arg_str, arg_sep, host_var_list
+
     def call_string(self, cldicts=None, host_dict=None, is_func_call=False, subname=None, sub_lname_list=None, use_parents=False):
         """Return a dummy argument string for this call list.
         <cldict> may be a list of VarDictionary objects to search for
@@ -119,122 +255,7 @@ class CallList(VarDictionary):
         arg_sep = ""
         host_var_list = []
         for var in self.variable_list():
-            # Do not include constants
-            stdname = var.get_prop_value('standard_name')
-            if stdname not in CCPP_CONSTANT_VARS:
-                # Find the dummy argument name
-                dummy = var.get_prop_value('local_name')
-                # Now, find the local variable name
-                if cldicts is not None:
-                    for cldict in cldicts:
-                        dvar = cldict.find_variable(standard_name=stdname,
-                                                    any_scope=False)
-                        if dvar is not None:
-                            break
-                        # end if
-                    # end for
-                    if dvar is None:
-                        if subname is not None:
-                            errmsg = "{}: ".format(subname)
-                        else:
-                            errmsg = ""
-                        # end if
-                        errmsg += "'{}', not found in call list for '{}'"
-                        clnames = [x.name for x in cldicts]
-                        raise CCPPError(errmsg.format(stdname, clnames))
-                    # end if
-                    lname = dvar.get_prop_value('local_name')
-                else:
-                    dvar = self.find_variable(standard_name=stdname,
-                                                    any_scope=False)
-                    cldict = None
-                    aref = var.array_ref(local_name=dummy)
-                    if aref is not None:
-                        lname = aref.group(1)
-                    else:
-                        lname = dummy
-                    # end if
-                # end if
-                # Modify Scheme call_list to handle local_name change for this var.
-                # Are there any variable transforms for this scheme?
-                # If so, change Var's local_name need to local dummy array containing
-                # transformed argument, var_trans_local.
-                if sub_lname_list:
-                    for (var_trans_local, var_lname, sname, rindices, lindices, compat_obj) in sub_lname_list:
-                        if (sname == stdname):
-                            lname = var_trans_local
-                        # end if
-                    # end for
-                # end if
-                if is_func_call:
-                    if cldicts is not None:
-                        use_dicts = cldicts
-                    else:
-                        use_dicts = [self]
-                        dvar = self.find_variable(standard_name=stdname)
-                    # end if
-                    run_phase = self.routine.run_phase()
-                    # We only need dimensions for suite variables in run phase
-                    need_dims = SuiteObject.is_suite_variable(dvar) and run_phase
-                    vdims = var.call_dimstring(var_dicts=use_dicts,
-                                               explicit_dims=need_dims,
-                                               loop_subst=run_phase)
-                    if _BLANK_DIMS_RE.match(vdims) is None:
-                        lname = lname + vdims
-                    # end if
-                # end if
-                # Using <host_dict>, construct Group and Scheme call_lists.
-                # When constructing Scheme call_lists*, use full variable name (e.g. parentDDT1%var1).
-                #  *Note* Additional handling for optional variables described below.
-                # When constructing Group call_lists, only pass in the parent DDT(s), and/or host
-                # flat fields (e.g. constants). These are stored in <host_var_list>
-                if host_dict:
-                    hvar = host_dict.find_variable(var.get_prop_value('standard_name'))
-                    if hvar is not None:
-                        if hvar.is_ddt():
-                            lname = host_dict.var_call_string(hvar)
-                        else:
-                            lname = dvar.get_prop_value('local_name')
-                        # end if
-                    # end if
-                    #### Creating Group call_list ####
-                    if use_parents:
-                        # Strip eldest <parent> DDT name, add to call_list, store in <host_var_list>.
-                        parent = lname.split('%', 1)[0]
-                        if parent != lname and parent not in host_var_list:
-                            arg_str += f"{arg_sep}{parent}"
-                            host_var_list.append(parent)
-                        elif parent == lname and parent not in host_var_list:
-                            lname = var.get_prop_value('local_name')
-                            arg_str += f"{arg_sep}{lname}"
-                        # end if
-                    #### Creating Schmeme call_list ####
-                    else:
-                        # Optional arguments in the Scheme call_lists are associated with
-                        # local pointers <lname_ptr>.
-                        hvar = host_dict.find_variable(standard_name=var.get_prop_value('standard_name'),any_scope=True)
-                        # Skip creating pointer if Host always provides field (e.g. active='.true.').
-                        if hvar:
-                            if var.get_prop_value('optional') and (hvar.get_prop_value('active') != '.true.'):
-                                # If threading variables provided by the Host, insert <var_thrd> to call string.
-                                var_thrd = host_dict.find_variable(standard_name='ccpp_thread_number',any_scope=True)
-                                if var_thrd:
-                                    lname = dvar.get_prop_value('local_name')+'_ptr'+'('+host_dict.var_call_string(var_thrd)+')'+'%p'
-                                # Otherwise, NO threading variables provided by the Host (e.g. thread_num=thread_count=1)
-                                else:
-                                    lname = dvar.get_prop_value('local_name')+'_ptr(1)%p'
-                                # end if
-                            # end if
-                        # end if
-                        if is_func_call:
-                            arg_str += "{}{}={}".format(arg_sep, dummy, lname)
-                        else:
-                            arg_str += "{}{}".format(arg_sep, lname)
-                        # end if
-                    # end if
-                # end if
-                arg_sep = ", "
-            # end if
+            arg_str, arg_sep, host_var_list = self.call_string_variable(var, host_var_list, arg_str, arg_sep, cldicts=cldicts, host_dict=host_dict, is_func_call=is_func_call, subname=subname, sub_lname_list=sub_lname_list, use_parents=use_parents)
         # end for
         return arg_str, host_var_list
 
@@ -1489,7 +1510,7 @@ class Scheme(SuiteObject):
         # If Host dictionary provided, use full variable name (always provided).
         hvar  = host_model.find_variable(dvar.get_prop_value('standard_name'))
         if hvar:
-            ldim_lname = host_model.var_call_string(hvar)
+            ldim_lname, _ = host_model.var_call_string(hvar)
         # end if
         # Get dimension for upper bound
         for var_dict in cldicts:
@@ -1502,7 +1523,7 @@ class Scheme(SuiteObject):
         # If Host dictionary provided, use full variable name (always provided).
         hvar  = host_model.find_variable(dvar.get_prop_value('standard_name'))
         if hvar:
-            udim_lname = host_model.var_call_string(hvar)
+            udim_lname, _ = host_model.var_call_string(hvar)
         # end if
         # Assemble dimensions and bounds for size checking
         dim_length = f'abs({udim_lname}-{ldim_lname})+1'
@@ -1559,7 +1580,7 @@ class Scheme(SuiteObject):
         hvar  = host_model.find_variable(dvar.get_prop_value('standard_name'))
         if hvar is not None:
             if hvar.is_ddt():
-                local_name = host_model.var_call_string(hvar)
+                local_name, _ = host_model.var_call_string(hvar)
             # end if
         # end if
 
@@ -1630,7 +1651,7 @@ class Scheme(SuiteObject):
                             dvar = var_dict.find_variable(standard_name=ldim.lower(), any_scope=False)
                             if dvar is not None:
                                 hvar  = host_model.find_variable(dvar.get_prop_value('standard_name'))
-                                ldim_lname = host_model.var_call_string(hvar)
+                                ldim_lname, _ = host_model.var_call_string(hvar)
                                 break
                             # end if
                         # end for
@@ -1647,7 +1668,7 @@ class Scheme(SuiteObject):
                             dvar = var_dict.find_variable(standard_name=udim.lower(), any_scope=False)
                             if dvar is not None:
                                 hvar  = host_model.find_variable(dvar.get_prop_value('standard_name'))
-                                udim_lname = host_model.var_call_string(hvar)
+                                udim_lname, _ = host_model.var_call_string(hvar)
                                 break
                             # end if
                         # end for
@@ -1759,7 +1780,7 @@ class Scheme(SuiteObject):
                 lname = svar.get_prop_value('local_name')+'_local'
             else:
                 if hvar:
-                    lname = host_model.var_call_string(hvar)
+                    lname, _ = host_model.var_call_string(hvar)
                 else:
                     lname = svar.get_prop_value('local_name')
                 # end if
@@ -1768,7 +1789,7 @@ class Scheme(SuiteObject):
             var_thrd = host_model.find_variable(standard_name='ccpp_thread_number',any_scope=True)
             dims = '1'
             if var_thrd:
-                dims = host_model.var_call_string(var_thrd)
+                dims, _ = host_model.var_call_string(var_thrd)
             # end if
             # Scheme has optional varaible, host has varaible defined as Conditional (Active).
             if conditional != '.true.':
@@ -1795,7 +1816,7 @@ class Scheme(SuiteObject):
                 lname = svar.get_prop_value('local_name')+'_local'
             else:
                 if hvar:
-                    lname = host_model.var_call_string(hvar)
+                    lname, _ = host_model.var_call_string(hvar)
                 else:
                     lname = svar.get_prop_value('local_name')
                 # end if
@@ -1804,7 +1825,7 @@ class Scheme(SuiteObject):
             var_thrd = host_model.find_variable(standard_name='ccpp_thread_number',any_scope=True)
             dims = '1'
             if var_thrd:
-                dims = host_model.var_call_string(var_thrd)
+                dims, _ = host_model.var_call_string(var_thrd)
             # end if
             # Scheme has optional varaible, Host has varaible defined as Conditional (Active).
             if conditional != '.true.':
@@ -1833,7 +1854,7 @@ class Scheme(SuiteObject):
                     lname = svar.get_prop_value('local_name') +'_local'
                 else:
                     if hvar:
-                        lname = host_model.var_call_string(hvar)
+                        lname, _ = host_model.var_call_string(hvar)
                     else:
                         lname = svar.get_prop_value('local_name')
                     # end if
@@ -1842,7 +1863,7 @@ class Scheme(SuiteObject):
                 var_thrd = host_model.find_variable(standard_name='ccpp_thread_number',any_scope=True)
                 dims = '1'
                 if var_thrd:
-                    dims = host_model.var_call_string(var_thrd)
+                    dims, _ = host_model.var_call_string(var_thrd)
                 # end if
                 # Scheme has optional varaible, Host has varaible defined as Conditional (Active).
                 if conditional != '.true.':
@@ -2740,7 +2761,7 @@ class Group(SuiteObject):
         outfile.write('', 0)
         # Pointer type declarations.
         if pointer_type_set:
-            outfile.write('! Local type defintions', indent+1)
+            outfile.write('! Local type definitions', indent+1)
         # end if
         for (pointer_type_name, var) in pointer_type_set:
             write_ptr_type_def(outfile, var, pointer_type_name, indent+1)
@@ -2789,14 +2810,14 @@ class Group(SuiteObject):
         else:
             verrcode = host_model.find_variable(standard_name='ccpp_error_code')
             if verrcode is not None:
-                errcode = host_model.var_call_string(verrcode)
+                errcode, _ = host_model.var_call_string(verrcode)
             else:
                 errmsg = "No ccpp_error_code variable for group, {}"
                 raise CCPPError(errmsg.format(self.name))
             # end if
             verrmsg = host_model.find_variable(standard_name='ccpp_error_message')
             if verrmsg is not None:
-                errmsg = host_model.var_call_string(verrmsg)
+                errmsg, _ = host_model.var_call_string(verrmsg)
             else:
                 errmsg = "No ccpp_error_message variable for group, {}"
                 raise CCPPError(errmsg.format(self.name))
