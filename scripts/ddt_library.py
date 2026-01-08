@@ -101,7 +101,7 @@ class VarDDT(Var):
         # end if
         return clone_var
 
-    def call_string(self, var_dict, loop_vars=None, use_parents=False):
+    def call_string(self, var_dict, loop_vars=None, use_parents=False, is_constituent=False):
         """Return a legal call string of this VarDDT's local name sequence.
         """
         # XXgoldyXX: Need to add dimensions to this
@@ -112,6 +112,11 @@ class VarDDT(Var):
                 call_string_var, additional_vars = self.field.call_string(var_dict,
                                                             loop_vars=loop_vars)
                 call_str += '%' + call_string_var
+            # end if
+        else:
+            var = var_dict.find_variable(self.get_prop_value('standard_name'))
+            if not is_constituenm:
+                _, additional_vars = var_dict.var_call_string(var, loop_vars=None, use_parents=False)
             # end if
         # end if
         # Parse call string and look for any reference to standard_name in local_name.

@@ -500,10 +500,13 @@ def suite_part_call_list(host_model, const_dict, suite_part, subst_loop_vars,
         # end if
         var_dicts = [host_model, const_dict]
         # Figure out which dictionary has the variable
+        is_const = False
         for vdict in var_dicts:
             hvar = vdict.find_variable(standard_name=stdname, any_scope=False)
             if hvar is not None:
                 var_dict = vdict
+                if vdict == const_dict:
+                    is_const = True
                 break
             # end if
         # end for
@@ -512,7 +515,7 @@ def suite_part_call_list(host_model, const_dict, suite_part, subst_loop_vars,
             raise CCPPError(errmsg)
         # End if
         if stdname not in CCPP_CONSTANT_VARS:
-            lname, additional_vars = var_dict.var_call_string(hvar, loop_vars=loop_vars, use_parents=use_parents)
+            lname, additional_vars = var_dict.var_call_string(hvar, loop_vars=loop_vars, use_parents=use_parents, is_constituent=is_const)
             if (lname not in parent_ddt_list):
                 if (hvar.is_ddt()):
                     hmvars.append(f"{lname}={lname}")
@@ -522,10 +525,10 @@ def suite_part_call_list(host_model, const_dict, suite_part, subst_loop_vars,
                 parent_ddt_list.append(lname)
             # end if
             # Also add any index variables to call list
-#            if additional_vars:
-#                for additional_var in additional_vars:
-#                    lname = additional_var.get_prop_value('local_name')
-#                    hmvars.append(f"{lname}={lname}")
+            if additional_vars:
+                for additional_var in additional_vars:
+                    lname = additional_var.get_prop_value('local_name')
+                    hmvars.append(f"{lname}={lname}")
                 # end for
             # end if
 
