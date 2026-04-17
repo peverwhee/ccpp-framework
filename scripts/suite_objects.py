@@ -131,7 +131,7 @@ class CallList(VarDictionary):
                 if cldicts is not None:
                     for cldict in cldicts:
                         dvar = cldict.find_variable(standard_name=stdname,
-                                                    any_scope=True)
+                                                    any_scope=False)
                         host_var = False
                         if dvar is not None:
                             var_in_call_list = True
@@ -166,7 +166,8 @@ class CallList(VarDictionary):
                         lname = dummy+'_ptr'
                     # Finally, handle the dimensions.
                     else:
-                        if dimensions and not host_var:
+                        vtype = dvar.get_prop_value('type')
+                        if dimensions and not host_var and vtype != 'ccpp_constituent_properties_t':
                             dimstr = '('
                             for cnt,dim in enumerate(dimensions):
                                 if is_horizontal_dimension(dim):
