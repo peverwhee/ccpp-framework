@@ -1349,6 +1349,7 @@ contains
     integer :: astat
     integer :: errcode_local
     logical :: check
+    character(len=512) :: stdname
     type(ccpp_hash_iterator_t) :: hiter
     class(ccpp_hashable_t), pointer :: hval
     type(ccpp_constituent_properties_t), pointer :: cprop
@@ -1402,6 +1403,35 @@ contains
       end if
       index_advect = 0
       index_const = this%num_advected_vars
+      ! Iterate through the hash table to find water vapor and add that first
+      if (errcode_local == 0) then
+         call hiter%initialize(this%hash_table)
+         do
+            if (hiter%valid()) then
+               hval => hiter%value()
+               select type(hval)
+               type is (ccpp_constituent_properties_t)
+                  cprop => hval
+                  call cprop%standard_name(stdname)
+                  if (trim(stdname) == 'water_vapor_mixing_ratio_wrt_moist_air_and_condensed_water') then
+                     index_advect = index_advect + 1
+                     call cprop%set_const_index(index_advect, &
+                             errcode=errcode, errmsg=errmsg)
+                     call this%const_metadata(index_advect)%set(cprop)
+                     exit
+                  end if
+               class default
+                  call append_errvars(1, "ERROR: Bad hash table value",    &
+                       subname, errcode=errcode, errmsg=errmsg)
+                  errcode_local = errcode_local + 1
+                  exit
+               end select
+               call hiter%next()
+            else
+               exit
+            end if
+         end do
+      end if
       ! Iterate through the hash table to find entries
       if (errcode_local == 0) then
         call hiter%initialize(this%hash_table)
@@ -1412,7 +1442,9 @@ contains
             type is (ccpp_constituent_properties_t)
               cprop => hval
               call cprop%is_advected(check)
-              if (check) then
+              call cprop%standard_name(stdname)
+              if (check .and. trim(stdname) /= &
+                      'water_vapor_mixing_ratio_wrt_moist_air_and_condensed_water') then
                 index_advect = index_advect + 1
                 if (index_advect > this%num_advected_vars) then
                   call append_errvars(1, "ERROR: const a index " // &
@@ -1425,7 +1457,7 @@ contains
                 call cprop%set_const_index(index_advect, &
                     errcode=errcode, errmsg=errmsg)
                 call this%const_metadata(index_advect)%set(cprop)
-              else
+              else if (trim(stdname) /= 'water_vapor_mixing_ratio_wrt_moist_air_and_condensed_water') then
                 index_const = index_const + 1
                 if (index_const > num_vars) then
                   call append_errvars(1, "ERROR: const v index " // &
