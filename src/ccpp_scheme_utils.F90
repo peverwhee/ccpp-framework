@@ -80,17 +80,12 @@ contains
       character(len=*), parameter :: subname = 'ccpp_constituent_index'
 
       call check_initialization(caller=subname, errcode=errcode, errmsg=errmsg)
-      write(6,*) 'peverwhee - index lookup'
-      write(6,*) standard_name
-      write(6,*) to_lower(standard_name)
-      write(6,*) errcode
       if (status_ok(errcode)) then
          call constituent_obj%const_index(const_index, to_lower(standard_name), &
               errcode, errmsg)
       else
          const_index = int_unassigned
       end if
-      write(6,*) const_index
    end subroutine ccpp_constituent_index
 
    subroutine ccpp_constituent_indices(standard_names, const_inds, errcode, errmsg)
