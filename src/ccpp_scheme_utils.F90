@@ -11,7 +11,7 @@ module ccpp_scheme_utils
    public :: ccpp_initialize_constituent_ptr ! Used by framework to initialize
    public :: ccpp_constituent_index          ! Lookup index constituent by name
    public :: ccpp_constituent_indices        ! Lookup indices of consitutents by name
-   public :: to_lower
+   public :: to_lower                        ! Convert string to lowercase
 
    !! Private module variables & interfaces
 
