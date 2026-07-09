@@ -11,6 +11,7 @@ module ccpp_scheme_utils
    public :: ccpp_initialize_constituent_ptr ! Used by framework to initialize
    public :: ccpp_constituent_index          ! Lookup index constituent by name
    public :: ccpp_constituent_indices        ! Lookup indices of consitutents by name
+   public :: to_lower
 
    !! Private module variables & interfaces
 
@@ -79,12 +80,17 @@ contains
       character(len=*), parameter :: subname = 'ccpp_constituent_index'
 
       call check_initialization(caller=subname, errcode=errcode, errmsg=errmsg)
+      write(6,*) 'peverwhee - index lookup'
+      write(6,*) standard_name
+      write(6,*) to_lower(standard_name)
+      write(6,*) errcode
       if (status_ok(errcode)) then
-         call constituent_obj%const_index(const_index, standard_name,         &
+         call constituent_obj%const_index(const_index, to_lower(standard_name), &
               errcode, errmsg)
       else
          const_index = int_unassigned
       end if
+      write(6,*) const_index
    end subroutine ccpp_constituent_index
 
    subroutine ccpp_constituent_indices(standard_names, const_inds, errcode, errmsg)
@@ -109,7 +115,7 @@ contains
             do indx = 1, size(standard_names)
                ! For each std name in <standard_names>, find the const. index
                call constituent_obj%const_index(const_inds(indx),             &
-                    standard_names(indx), errcode, errmsg)
+                    to_lower(standard_names(indx)), errcode, errmsg)
                if (errcode /= 0) then
                   exit
                end if
@@ -117,5 +123,35 @@ contains
          end if
       end if
    end subroutine ccpp_constituent_indices
+
+   function to_lower(str)
+
+     implicit none
+
+     ! !INPUT/OUTPUT PARAMETERS:
+     character(len=*), intent(in) :: str      ! String to convert to lower case
+     character(len=len(str))      :: to_lower
+
+     !----- local -----
+     integer :: i              ! Index
+     integer :: aseq           ! ascii collating sequence
+     integer :: upper_to_lower ! integer to convert case
+     character(len=1) :: ctmp  ! Character temporary
+
+     !-------------------------------------------------------------------------------
+     !
+     !-------------------------------------------------------------------------------
+
+     upper_to_lower = iachar("a") - iachar("A")
+
+     do i = 1, len(str)
+        ctmp = str(i:i)
+        aseq = iachar(ctmp)
+        if ( aseq >= iachar("A") .and. aseq <= iachar("Z") ) &
+             ctmp = achar(aseq + upper_to_lower)
+        to_lower(i:i) = ctmp
+     end do
+
+  end function to_lower
 
 end module ccpp_scheme_utils
