@@ -7,5 +7,5 @@ The CCPP Framework is designed to be used with the [CCPP Physics repository](htt
 
 The CCPP Single Column Model (SCM) is designed as a simple host model for testing and development of the CCPP; information about building and using the CCPP in this context can be found in [the CCPP SCM Users Guide](https://dtcenter.org/sites/default/files/paragraph/scm-ccpp-guide-v6.0.0.pdf).
 
-More information about the design and use of CCPP can be found in the [CCPP Technical Documentation](https://ccpp-techdoc.readthedocs.io/en/v6.0.0/).
+ore information about the design and use of CCPP can be found in the [CCPP Technical Documentation](https://ccpp-techdoc.readthedocs.io/en/v6.0.0/).
 
